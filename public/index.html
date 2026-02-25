@@ -651,7 +651,7 @@ async function loadHalts(silent = false) {
     }
 
     try {
-        const csvUrl = 'https://www.nyse.com/api/trade-halts/current/download';
+        const csvUrl = '/api/fetch-halts';
         let csvText = null;
 
         // Try direct first (fast — works when served over HTTP with CORS blocker active)
