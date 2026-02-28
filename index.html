@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StockDash</title>
+    <title>Stock Search</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex; flex-direction: column;
         }
         nav {
             background: rgba(255,255,255,0.15);
@@ -30,72 +29,322 @@
         .nav-btn:hover { background: rgba(255,255,255,0.2); }
         .nav-btn.active { background: white; color: #667eea; border-color: white; }
 
-        .hero {
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            padding: 40px 20px;
-        }
-        .hero-inner { text-align: center; max-width: 700px; }
-        .hero h1 { color: white; font-size: 52px; font-weight: 800; margin-bottom: 16px; letter-spacing: -1px; }
-        .hero p { color: rgba(255,255,255,0.85); font-size: 20px; margin-bottom: 48px; line-height: 1.6; }
+        .page { padding: 24px 20px; }
+        .inner { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); margin-bottom: 24px; }
+        .card h2 { color: #333; font-size: 22px; margin-bottom: 20px; }
 
-        .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
-        .dash-card {
-            background: white; border-radius: 16px; padding: 36px 32px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-            text-decoration: none; color: inherit;
-            transition: transform 0.2s, box-shadow 0.2s;
-            display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+        .search-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+        input[type="text"] { flex: 1; padding: 13px 18px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 15px; transition: border-color 0.2s; }
+        input[type="text"]:focus { outline: none; border-color: #667eea; }
+        .btn-primary {
+            padding: 13px 36px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; border-radius: 8px; font-size: 15px;
+            font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; white-space: nowrap;
         }
-        .dash-card:hover { transform: translateY(-6px); box-shadow: 0 30px 80px rgba(0,0,0,0.2); }
-        .dash-card .icon { font-size: 40px; }
-        .dash-card h2 { font-size: 22px; color: #333; font-weight: 700; }
-        .dash-card p { color: #666; font-size: 15px; line-height: 1.5; }
-        .dash-card .arrow {
-            margin-top: auto; padding-top: 16px;
-            color: #667eea; font-weight: 700; font-size: 14px;
-            display: flex; align-items: center; gap: 6px;
-        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
 
-        .footer { text-align: center; padding: 24px; color: rgba(255,255,255,0.5); font-size: 13px; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 38px; height: 38px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading { text-align: center; padding: 20px; color: #667eea; font-weight: 600; display: none; }
+        .loading.active { display: block; }
+        .error-box { background: #fee; color: #c00; padding: 14px; border-radius: 8px; margin-top: 12px; display: none; }
+        .error-box.active { display: block; }
 
-        @media (max-width: 580px) {
-            .cards { grid-template-columns: 1fr; }
-            .hero h1 { font-size: 36px; }
-            .hero p { font-size: 16px; }
-        }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+        .stat-item { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 18px; border-radius: 8px; text-align: center; }
+        .stat-label { color: #666; font-size: 13px; margin-bottom: 6px; }
+        .stat-value { color: #333; font-size: 22px; font-weight: 700; word-break: break-word; }
+
+        .news-item { border-bottom: 1px solid #e8e8e8; padding: 18px 0; }
+        .news-item:last-child { border-bottom: none; }
+        .news-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+        .news-time { color: #999; font-size: 13px; }
+        .price-impact { padding: 3px 10px; border-radius: 4px; font-weight: 600; font-size: 13px; }
+        .price-impact.positive { background: #d4edda; color: #155724; }
+        .price-impact.negative { background: #f8d7da; color: #721c24; }
+        .news-title { font-size: 16px; margin-bottom: 8px; }
+        .news-title a { color: #333; text-decoration: none; }
+        .news-title a:hover { color: #667eea; }
+        .news-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+        .badge { background: #667eea; color: white; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
     </style>
 </head>
 <body>
 <nav>
     <div class="nav-inner">
-        <span class="nav-logo">📈 StockDash</span>
-        <a href="c.html" class="nav-btn">🔍 Stock Search</a>
+        <a href="index.html" class="nav-logo" style="text-decoration:none;color:white">📈 StockDash</a>
+        <a href="index.html" class="nav-btn active">🔍 Stock Search</a>
         <a href="halts.html" class="nav-btn">🚫 Trading Halts</a>
-        <a href="index.html" class="nav-btn active">🏠 Dashboard</a>
     </div>
 </nav>
 
-<div class="hero">
-    <div class="hero-inner">
-        <h1>📈 StockDash</h1>
-        <p>Real-time stock news & statistics, plus live NYSE trading halt monitoring — all in one place.</p>
-        <div class="cards">
-            <a href="stock-search.html" class="dash-card">
-                <div class="icon">🔍</div>
-                <h2>Stock Search</h2>
-                <p>Look up any ticker for the latest news, price impact, stats, short interest, and more.</p>
-                <div class="arrow">Open Search →</div>
-            </a>
-            <a href="halts.html" class="dash-card">
-                <div class="icon">🚫</div>
-                <h2>Trading Halts</h2>
-                <p>Live NYSE trading halts with LULD, news, and regulatory classifications. Auto-refreshes every 30s.</p>
-                <div class="arrow">View Halts →</div>
-            </a>
+<div class="page">
+    <div class="inner">
+        <div class="card">
+            <h2>🔍 Stock Search</h2>
+            <div class="search-bar">
+                <input type="text" id="tickerInput" placeholder="Enter ticker (e.g. ATOM, AAPL, TSLA)" value="GXAI">
+                <button class="btn-primary" id="searchBtn" onclick="searchStock()">Search</button>
+            </div>
+            <div class="loading" id="stockLoading"><div class="spinner"></div>Fetching data...</div>
+            <div class="error-box" id="stockError"></div>
+        </div>
+
+        <div id="stockResults" style="display:none">
+            <div class="card">
+                <h2>📊 Stock Statistics</h2>
+                <div class="stat-grid" id="statsGrid"></div>
+            </div>
+            <div class="card">
+                <h2>📰 Latest News</h2>
+                <div id="newsContainer"></div>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="footer">Run via <code>python launch.py</code> for full functionality</div>
+<script>
+// ── exact stock search logic from 972-line working version ──
+const tickerInput   = document.getElementById('tickerInput');
+const stockLoading  = document.getElementById('stockLoading');
+const stockError    = document.getElementById('stockError');
+const stockResults  = document.getElementById('stockResults');
+const statsGrid     = document.getElementById('statsGrid');
+const newsContainer = document.getElementById('newsContainer');
+
+tickerInput.addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
+
+async function fetchWithTimeout(url, ms = 8000, headers = {}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+        const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store', headers: { 'Cache-Control': 'no-cache', ...headers } });
+        clearTimeout(t);
+        return r;
+    } catch(e) { clearTimeout(t); throw e; }
+}
+
+async function fetchHtml(url) {
+    const cacheBust = Date.now();
+    const bustUrl = url.includes('?') ? `${url}&_cb=${cacheBust}` : `${url}?_cb=${cacheBust}`;
+    const proxies = [
+        `https://corsproxy.io/?${encodeURIComponent(bustUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(bustUrl)}&ts=${cacheBust}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(bustUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${bustUrl}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}&ts=${cacheBust + 1}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&ts=${cacheBust + 2}`,
+    ];
+    for (let i = 0; i < proxies.length; i++) {
+        try {
+            console.log(`[fetch] Trying proxy ${i + 1}/${proxies.length}...`);
+            const r = await fetchWithTimeout(proxies[i], 10000);
+            if (r.ok) {
+                const t = await r.text();
+                if (t && t.length > 500) { console.log(`[fetch] Proxy ${i+1} succeeded (${t.length} bytes)`); return t; }
+            }
+        } catch(e) { console.log(`[fetch] Proxy ${i+1} failed:`, e.message); }
+        if (i < proxies.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+    throw new Error('Could not load data — all sources are temporarily unavailable. Please try again in a few seconds.');
+}
+
+async function searchStock() {
+    const ticker = tickerInput.value.trim().toUpperCase();
+    if (!ticker) { showStockError('Please enter a stock ticker'); return; }
+    stockLoading.classList.add('active');
+    stockError.classList.remove('active');
+    stockResults.style.display = 'none';
+    document.getElementById('searchBtn').disabled = true;
+    try {
+        const html = await fetchHtml(`https://www.stocktitan.net/overview/${ticker}/`);
+        const doc  = new DOMParser().parseFromString(html, 'text/html');
+        const news = extractNews(doc, ticker);
+        const stats = extractStats(doc);
+        if (news.length === 0 && Object.keys(stats).length === 0)
+            throw new Error(`No data found for "${ticker}".`);
+        displayStats(stats, ticker);
+        displayNews(news);
+        stockResults.style.display = 'block';
+    } catch(err) {
+        showStockError(err.message);
+    } finally {
+        stockLoading.classList.remove('active');
+        document.getElementById('searchBtn').disabled = false;
+    }
+}
+
+function parseRelativeTime(str) {
+    const m = str.match(/(\d+)\s+(second|minute|hour|day|week|month)/i);
+    if (!m) return Date.now();
+    const n = parseInt(m[1]);
+    const unit = m[2].toLowerCase();
+    const ms = { second: 1000, minute: 60000, hour: 3600000, day: 86400000, week: 604800000, month: 2592000000 };
+    return n * (ms[unit] || 60000);
+}
+
+function extractNews(doc, ticker) {
+    const items = [], seen = new Set();
+    const wrappers = doc.querySelectorAll('.news-item-wrapper, .news-item');
+    wrappers.forEach(wrapper => {
+        const anchor = wrapper.querySelector('h3.news-title a, .news-title a, h3 a[href*="/news/"]');
+        if (!anchor) return;
+        const title = anchor.textContent.trim();
+        if (!title || seen.has(title)) return;
+        seen.add(title);
+        const href = anchor.getAttribute('href') || '';
+        const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
+        const timeEl = wrapper.querySelector('.news-time');
+        let time = 'Unknown', sortKey = 0;
+        if (timeEl) {
+            const rawText = timeEl.textContent.replace(/[^\w\s,]+/g, '').trim();
+            const titleAttr = timeEl.getAttribute('title') || '';
+            const relMatch = rawText.match(/(\d+\s+(?:second|minute|hour|day|week|month)s?\s+ago)/i);
+            if (relMatch) {
+                time = relMatch[1];
+                sortKey = titleAttr ? (Date.now() - new Date(titleAttr).getTime()) : parseRelativeTime(relMatch[1]);
+            } else {
+                const parsed = new Date(titleAttr || rawText);
+                time = rawText.replace(/^\s*\w+\s+/, '').trim() || rawText;
+                sortKey = isNaN(parsed) ? Date.now() : (Date.now() - parsed.getTime());
+            }
+        }
+        let impactText = '', isPositive = false;
+        const impactEl = wrapper.querySelector('.price-impact');
+        if (impactEl) {
+            const impactRaw = impactEl.textContent.trim();
+            const impactMatch = impactRaw.match(/([+\-]?\d+(?:\.\d+)?%)/);
+            if (impactMatch && impactMatch[1] !== '0.00%') {
+                impactText = impactMatch[1].startsWith('-') ? impactMatch[1] : '+' + impactMatch[1].replace(/^\+/, '');
+                isPositive = !impactEl.classList.contains('negative');
+            }
+            if (impactEl.classList.contains('positive')) isPositive = true;
+            if (impactEl.classList.contains('negative')) isPositive = false;
+        }
+        const tags = [];
+        wrapper.querySelectorAll('.news-tags .badge, .news-tags .tag').forEach(badge => {
+            const t = badge.textContent.trim();
+            if (t && t.length < 40) tags.push(t);
+        });
+        items.push({ time, title, link, impact: impactText ? { value: impactText, isPositive } : null, tags, sortKey });
+    });
+
+    if (items.length === 0) {
+        doc.querySelectorAll(`a[href*="/news/${ticker}/"]`).forEach(anchor => {
+            const title = anchor.textContent.trim();
+            if (!title || title.length < 10 || seen.has(title)) return;
+            seen.add(title);
+            const href = anchor.getAttribute('href') || '';
+            const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
+            let node = anchor.parentElement;
+            let time = 'Unknown', sortKey = Date.now(), impactText = '', isPositive = false;
+            for (let i = 0; i < 8 && node; i++) {
+                const text = node.textContent;
+                const rel = text.match(/(\d+\s+(?:second|minute|hour|day|week|month)s?\s+ago)/i);
+                const abs = text.match(/((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d+,?\s*\d{0,4})/i);
+                const imp = text.match(/([+\-]\d+(?:\.\d+)?%)/);
+                if (rel) { time = rel[1]; sortKey = parseRelativeTime(rel[1]); break; }
+                if (abs) { time = abs[1].trim(); sortKey = Date.now() - new Date(abs[1]).getTime(); break; }
+                if (imp) { impactText = imp[1]; isPositive = imp[1].startsWith('+'); }
+                node = node.parentElement;
+            }
+            items.push({ time, title, link, impact: impactText ? { value: impactText, isPositive } : null, tags: [], sortKey });
+        });
+    }
+
+    if (items.length === 0) {
+        doc.querySelectorAll('a[href*="/news/"]').forEach(anchor => {
+            const title = anchor.textContent.trim();
+            if (!title || title.length < 20 || !title.includes(' ') || seen.has(title)) return;
+            const href = anchor.getAttribute('href') || '';
+            if (!href.match(/\/news\/[A-Z]+\//i)) return;
+            seen.add(title);
+            const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
+            items.push({ time: 'Unknown', title, link, impact: null, tags: [], sortKey: Date.now() });
+        });
+    }
+
+    items.sort((a, b) => a.sortKey - b.sortKey);
+    return items;
+}
+
+function extractStats(doc) {
+    const stats = {}, body = doc.body ? doc.body.innerHTML : '';
+    const regexMap = [
+        ['Price',              /current stock price[^$]*\$([0-9,\.]+)/i,               '$'],
+        ['Market Cap',         /market cap[^i]*is approximately ([0-9,\.\$MBKTmbt]+)/i, ''],
+        ['Shares Outstanding', /shares outstanding[^i]*is ([0-9,\.MBKTmbt]+)/i,         ''],
+        ['Revenue (TTM)',      /revenue.*?TTM.*?is \$([0-9,\.MBKTmbt]+)/i,              '$'],
+        ['Net Income (TTM)',   /net income.*?TTM.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,      ''],
+        ['Diluted EPS',        /diluted.*?EPS.*?is (\$[0-9,\.\-]+)/i,                  ''],
+        ['Operating CF',       /operating cash flow.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,  ''],
+        ['Net Profit Margin',  /net profit margin.*?is ([0-9\-\.]+%)/i,                ''],
+        ['Short Interest',     /short interest[^s]*stands at ([0-9,\.]+ (?:thousand|million|billion)? shares)/i, ''],
+        ['Float (Short %)',    /([0-9,\.]+%)\s+of the float/i,                         ''],
+        ['Days to Cover',      /days to cover[^s]*stands at ([0-9,\.]+ days)/i,        ''],
+        ['Current Ratio',      /current ratio[^i]*is ([0-9,\.]+)/i,                   ''],
+    ];
+    regexMap.forEach(([label, regex, prefix]) => {
+        const m = body.match(regex);
+        if (m && m[1]) stats[label] = (prefix + m[1].trim()).trim();
+    });
+    doc.querySelectorAll('dl').forEach(dl => {
+        const dts = dl.querySelectorAll('dt'), dds = dl.querySelectorAll('dd');
+        for (let i = 0; i < Math.min(dts.length, dds.length); i++) {
+            const k = dts[i].textContent.trim(), v = dds[i].textContent.trim();
+            if (k && v && !stats[k]) stats[k] = v;
+        }
+    });
+    return stats;
+}
+
+function displayStats(stats, ticker) {
+    statsGrid.innerHTML = '';
+    const add = (label, value, highlight = false) => {
+        const el = document.createElement('div');
+        el.className = 'stat-item';
+        if (highlight) {
+            el.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            el.innerHTML = `<div class="stat-label" style="color:white">📊 ${label}</div><div class="stat-value" style="color:white;font-size:26px">${value}</div>`;
+        } else {
+            el.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
+        }
+        statsGrid.appendChild(el);
+    };
+    add('Ticker', ticker);
+    if (!Object.keys(stats).length) { add('Status', 'No Stats Found'); return; }
+    const priority = ['Price','Market Cap','Shares Outstanding','Float','Short Interest','Float (Short %)','Days to Cover','Revenue (TTM)','Net Income (TTM)','Diluted EPS','Operating CF','Net Profit Margin','Current Ratio'];
+    Object.entries(stats)
+        .sort((a, b) => { const ai = priority.findIndex(p => a[0].includes(p)), bi = priority.findIndex(p => b[0].includes(p)); return (ai===-1?99:ai)-(bi===-1?99:bi); })
+        .forEach(([label, value]) => {
+            const sv = String(value).trim();
+            if (sv && sv !== 'null') add(label, sv, label.toLowerCase().includes('float'));
+        });
+}
+
+function displayNews(items) {
+    newsContainer.innerHTML = '';
+    if (!items.length) { newsContainer.innerHTML = '<p style="color:#aaa;text-align:center;padding:32px">No news found.</p>'; return; }
+    items.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'news-item';
+        const impact = n.impact ? `<div class="price-impact ${n.impact.isPositive?'positive':'negative'}">${n.impact.isPositive?'▲':'▼'} ${n.impact.value}</div>` : '';
+        const tags = n.tags.length ? `<div class="news-tags">${n.tags.map(t=>`<span class="badge">${t}</span>`).join('')}</div>` : '';
+        el.innerHTML = `<div class="news-meta"><div class="news-time">🕐 ${n.time}</div>${impact}</div><h3 class="news-title"><a href="${n.link}" target="_blank">${n.title}</a></h3>${tags}`;
+        newsContainer.appendChild(el);
+    });
+}
+
+function showStockError(msg) {
+    stockError.textContent = msg;
+    stockError.classList.add('active');
+    stockResults.style.display = 'none';
+}
+
+window.addEventListener('load', () => searchStock());
+</script>
 </body>
 </html>
