@@ -131,6 +131,8 @@ async function fetchHtml(url) {
     const cacheBust = Date.now();
     const bustUrl = url.includes('?') ? `${url}&_cb=${cacheBust}` : `${url}?_cb=${cacheBust}`;
     const proxies = [
+        // Your own Vercel serverless proxy — reliable, no rate limits, no CORS issues
+        `/api/proxy?url=${encodeURIComponent(url)}`,
         `https://corsproxy.io/?${encodeURIComponent(bustUrl)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(bustUrl)}&ts=${cacheBust}`,
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(bustUrl)}`,
