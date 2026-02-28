@@ -264,6 +264,8 @@ async function loadHalts(silent = false) {
 
         if (!csvText) {
             const proxies = [
+                // Your own Vercel proxy — reliable, no rate limits
+                `/api/proxy?url=${encodeURIComponent(csvUrl)}`,
                 `https://corsproxy.io/?${encodeURIComponent(csvUrl)}`,
                 `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`,
                 `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(csvUrl)}`,
@@ -360,7 +362,10 @@ function parseCsvLine(line, delim) {
 }
 
 function parseHaltsCsv(csv) {
-    const lines = csv.trim().split('\n');
+    // Normalise line endings — NYSE sends \r\n, leaving \r on every cell value.
+    // This silently breaks all field lookups so filters show "No halts match this filter"
+    // even when real halts exist.
+    const lines = csv.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
     if (lines.length < 2) return [];
     const firstLine = lines[0];
     const delim = firstLine.includes('|') ? '|' : ',';
@@ -371,13 +376,14 @@ function parseHaltsCsv(csv) {
         const line = lines[i].trim();
         if (!line) continue;
         const cells = parseCsvLine(line, delim);
-        if (cells.length < 3) continue;
         const row = {};
         headers.forEach((h, idx) => { row[h] = (cells[idx] || '').trim(); });
+        const symbol = row['symbol'] || row['ticker'] || '';
+        if (!symbol) continue; // skip blank or repeated-header rows
         rows.push({
             date:       row['halt date'] || row['date'] || '',
             haltTime:   row['halt time'] || row['time'] || '',
-            symbol:     row['symbol'] || row['ticker'] || '',
+            symbol,
             name:       row['name'] || row['company name'] || row['company'] || '',
             exchange:   row['market'] || row['exchange'] || row['mkt'] || '',
             reason:     row['reason code'] || row['reason'] || row['halt reason'] || '',
@@ -387,7 +393,6 @@ function parseHaltsCsv(csv) {
     }
     return rows.sort((a, b) => new Date(`${b.date} ${b.haltTime}`) - new Date(`${a.date} ${a.haltTime}`));
 }
-
 function renderHalts(filter) {
     currentFilter = filter;
     const tbody = document.getElementById('haltsBody');
