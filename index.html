@@ -3,26 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Search – StockDash</title>
+    <title>Stock Search</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        nav { background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.2); padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        nav {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding: 0 20px;
+            position: sticky; top: 0; z-index: 100;
+        }
         .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 56px; }
-        .nav-logo { color: white; font-weight: 700; font-size: 18px; margin-right: 16px; white-space: nowrap; text-decoration: none; }
-        .nav-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 7px 18px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
+        .nav-logo { color: white; font-weight: 700; font-size: 18px; margin-right: 16px; white-space: nowrap; }
+        .nav-btn {
+            background: transparent; border: 1px solid rgba(255,255,255,0.4);
+            color: white; padding: 7px 18px; border-radius: 6px;
+            font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+            text-decoration: none; display: inline-flex; align-items: center;
+        }
         .nav-btn:hover { background: rgba(255,255,255,0.2); }
         .nav-btn.active { background: white; color: #667eea; border-color: white; }
+
         .page { padding: 24px 20px; }
         .inner { max-width: 1200px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); margin-bottom: 24px; }
         .card h2 { color: #333; font-size: 22px; margin-bottom: 20px; }
+
         .search-bar { display: flex; gap: 10px; margin-bottom: 16px; }
         input[type="text"] { flex: 1; padding: 13px 18px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 15px; transition: border-color 0.2s; }
         input[type="text"]:focus { outline: none; border-color: #667eea; }
-        .btn-primary { padding: 13px 36px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; white-space: nowrap; }
+        .btn-primary {
+            padding: 13px 36px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; border-radius: 8px; font-size: 15px;
+            font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; white-space: nowrap;
+        }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
         .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 38px; height: 38px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .loading { text-align: center; padding: 20px; color: #667eea; font-weight: 600; display: none; }
@@ -30,424 +53,242 @@
         .error-box { background: #fee; color: #c00; padding: 14px; border-radius: 8px; margin-top: 12px; display: none; }
         .error-box.active { display: block; }
 
-        /* source pills */
-        .source-status { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .src-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #e0e0e0; color: #888; background: #f8f9fa; transition: all 0.3s; }
-        .src-pill.loading { border-color: #ffc107; color: #856404; background: #fff3cd; }
-        .src-pill.ok      { border-color: #28a745; color: #155724; background: #d4edda; }
-        .src-pill.fail    { border-color: #dc3545; color: #721c24; background: #f8d7da; }
-        .src-pill.empty   { border-color: #aaa;    color: #666;    background: #e2e3e5; }
-        .src-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-
-        /* hot banner */
-        .hot-banner { display: none; align-items: center; gap: 16px; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffcd3c 100%); border-radius: 10px; padding: 16px 22px; margin-bottom: 22px; box-shadow: 0 4px 20px rgba(255,107,53,0.4); animation: flamePulse 2s ease-in-out infinite; }
-        .hot-banner.visible { display: flex; }
-        @keyframes flamePulse { 0%,100%{box-shadow:0 4px 20px rgba(255,107,53,0.4)} 50%{box-shadow:0 4px 36px rgba(255,107,53,0.75)} }
-        .hot-flame { font-size: 36px; line-height:1; animation: flameWiggle 0.6s ease-in-out infinite alternate; flex-shrink:0; }
-        @keyframes flameWiggle { from{transform:rotate(-8deg) scale(1)} to{transform:rotate(8deg) scale(1.15)} }
-        .hot-text { flex: 1; min-width: 0; }
-        .hot-title { font-size: 18px; font-weight: 800; color: white; margin-bottom: 8px; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .hot-reasons { display: flex; gap: 6px; flex-wrap: wrap; }
-        .hot-tag { background: rgba(255,255,255,0.25); color: white; padding: 3px 11px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid rgba(255,255,255,0.45); white-space: nowrap; }
-
-        /* stats */
         .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
         .stat-item { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 18px; border-radius: 8px; text-align: center; }
         .stat-label { color: #666; font-size: 13px; margin-bottom: 6px; }
         .stat-value { color: #333; font-size: 22px; font-weight: 700; word-break: break-word; }
 
-        /* news */
-        .news-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-        .news-count { font-size: 13px; color: #888; }
-        .sort-btn { padding: 4px 12px; border-radius: 20px; border: 1px solid #ddd; background: white; font-size: 12px; cursor: pointer; color: #555; transition: all 0.15s; }
-        .sort-btn:hover { border-color: #667eea; color: #667eea; }
-        .sort-btn.active { background: #667eea; color: white; border-color: #667eea; }
-        .news-item { border-bottom: 1px solid #e8e8e8; padding: 15px 0; }
+        .news-item { border-bottom: 1px solid #e8e8e8; padding: 18px 0; }
         .news-item:last-child { border-bottom: none; }
-        .news-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; flex-wrap: wrap; gap: 6px; }
-        .news-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .news-time { color: #999; font-size: 12px; }
-        .news-time.breaking { color: #c00; font-weight: 700; }
-        .news-source-tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 3px; background: #f0f4ff; color: #667eea; border: 1px solid #d0d9ff; }
-        .breaking-badge { background: #c00; color: white; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 3px; letter-spacing: 0.5px; animation: breakPulse 1s ease-in-out infinite; }
-        @keyframes breakPulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+        .news-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+        .news-time { color: #999; font-size: 13px; }
         .price-impact { padding: 3px 10px; border-radius: 4px; font-weight: 600; font-size: 13px; }
         .price-impact.positive { background: #d4edda; color: #155724; }
         .price-impact.negative { background: #f8d7da; color: #721c24; }
-        .news-title { font-size: 15px; margin-bottom: 7px; line-height: 1.4; }
-        .news-title a { color: #222; text-decoration: none; }
+        .news-title { font-size: 16px; margin-bottom: 8px; }
+        .news-title a { color: #333; text-decoration: none; }
         .news-title a:hover { color: #667eea; }
         .news-tags { display: flex; gap: 6px; flex-wrap: wrap; }
         .badge { background: #667eea; color: white; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .no-news { text-align: center; padding: 32px; color: #aaa; }
-        .partial-warn { background: #fff8e1; border-left: 4px solid #ffc107; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; color: #856404; margin-bottom: 14px; display: none; }
-        .partial-warn.active { display: block; }
     </style>
 </head>
 <body>
 <nav>
     <div class="nav-inner">
-        <a href="index.html" class="nav-logo">📈 StockDash</a>
+        <a href="index.html" class="nav-logo" style="text-decoration:none;color:white">📈 StockDash</a>
         <a href="index.html" class="nav-btn active">🔍 Stock Search</a>
         <a href="halts.html" class="nav-btn">🚫 Trading Halts</a>
         <a href="splits.html" class="nav-btn">✂️ Stock Splits</a>
     </div>
 </nav>
 
-<div class="page"><div class="inner">
-    <div class="card">
-        <h2>🔍 Stock Search</h2>
-        <div class="search-bar">
-            <input type="text" id="tickerInput" placeholder="Enter ticker (e.g. ATOM, AAPL, TSLA)" value="AAPL">
-            <button class="btn-primary" id="searchBtn" onclick="searchStock()">Search</button>
-        </div>
-        <div class="loading" id="stockLoading"><div class="spinner"></div><span id="loadingMsg">Fetching data...</span></div>
-        <div class="error-box" id="stockError"></div>
-    </div>
-
-    <div id="stockResults" style="display:none">
+<div class="page">
+    <div class="inner">
         <div class="card">
-            <div class="hot-banner" id="hotBanner">
-                <div class="hot-flame">🔥</div>
-                <div class="hot-text">
-                    <div class="hot-title" id="hotTitle">🔥 HOT STOCK ALERT</div>
-                    <div class="hot-reasons" id="hotReasons"></div>
-                </div>
+            <h2>🔍 Stock Search</h2>
+            <div class="search-bar">
+                <input type="text" id="tickerInput" placeholder="Enter ticker (e.g. ATOM, AAPL, TSLA)" value="GXAI">
+                <button class="btn-primary" id="searchBtn" onclick="searchStock()">Search</button>
             </div>
-            <h2>📊 Stock Statistics</h2>
-            <div class="stat-grid" id="statsGrid"></div>
+            <div class="loading" id="stockLoading"><div class="spinner"></div>Fetching data...</div>
+            <div class="error-box" id="stockError"></div>
         </div>
 
-        <div class="card">
-            <div class="news-header">
-                <h2 style="margin-bottom:0">📰 Latest News</h2>
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                    <span class="news-count" id="newsCount"></span>
-                    <button class="sort-btn active" onclick="sortNews('newest',this)">Newest First</button>
-                    <button class="sort-btn" onclick="sortNews('oldest',this)">Oldest First</button>
-                </div>
+        <div id="stockResults" style="display:none">
+            <div class="card">
+                <h2>📊 Stock Statistics</h2>
+                <div class="stat-grid" id="statsGrid"></div>
             </div>
-            <div class="source-status" id="sourceStatus"></div>
-            <div class="partial-warn" id="partialWarn"></div>
-            <div id="newsContainer"></div>
+            <div class="card">
+                <h2>📰 Latest News</h2>
+                <div id="newsContainer"></div>
+            </div>
         </div>
     </div>
-</div></div>
+</div>
 
 <script>
-const SOURCES = [
-    { id: 'stocktitan', label: 'StockTitan'  },
-    { id: 'finviz',     label: 'Finviz'      },
-    { id: 'benzinga',   label: 'Benzinga RSS' },
-    { id: 'yahoo',      label: 'Yahoo RSS'   },
-];
+// ── exact stock search logic from 972-line working version ──
+const tickerInput   = document.getElementById('tickerInput');
+const stockLoading  = document.getElementById('stockLoading');
+const stockError    = document.getElementById('stockError');
+const stockResults  = document.getElementById('stockResults');
+const statsGrid     = document.getElementById('statsGrid');
+const newsContainer = document.getElementById('newsContainer');
 
-let allNewsItems = [], currentSort = 'newest';
+tickerInput.addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
 
-// Tracks when the server actually fetched the data.
-// Relative times from StockTitan ("15 hours ago") are anchored to this,
-// not to Date.now(), so cached responses don't cause timestamp drift.
-let _fetchedAt = Date.now();
-
-// ── Pills ──────────────────────────────────────────────────────
-function initSourcePills() {
-    document.getElementById('sourceStatus').innerHTML =
-        SOURCES.map(s => `<span class="src-pill loading" id="pill-${s.id}"><span class="src-dot"></span>${s.label} ⏳</span>`).join('');
-}
-function setPill(id, state, extra = '') {
-    const p = document.getElementById(`pill-${id}`);
-    if (!p) return;
-    p.className = `src-pill ${state}`;
-    const s = SOURCES.find(x => x.id === id);
-    const icon = { loading:'⏳', ok:'✅', fail:'❌', empty:'—' }[state] || '';
-    p.innerHTML = `<span class="src-dot"></span>${s.label} ${icon}${extra}`;
+async function fetchWithTimeout(url, ms = 8000, headers = {}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+        const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store', headers: { 'Cache-Control': 'no-cache', ...headers } });
+        clearTimeout(t);
+        return r;
+    } catch(e) { clearTimeout(t); throw e; }
 }
 
-// ── Time helpers ───────────────────────────────────────────────
-const REL_MS = { second:1000, minute:60000, hour:3600000, day:86400000, week:604800000, month:2592000000 };
-
-// Computes display label fresh from the stored absolute timestamp.
-// Called at render time so it's always accurate — never frozen from parse time.
-function formatDisplay(ts) {
-    const diff = Date.now() - ts;
-    if (diff < 3600000)  return `${Math.round(diff / 60000)} min ago`;
-    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
-    return new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-}
-
-// Returns only { ts } — no display string stored.
-// For relative times, anchors to _fetchedAt (server fetch time) not Date.now(),
-// so a cached "15 hours ago" doesn't drift to "22 hours ago" later.
-function parseTimeStr(raw, titleAttr) {
-    // 1. ISO datetime in title attribute — most accurate
-    if (titleAttr) {
-        const d = new Date(titleAttr);
-        if (!isNaN(d)) return { ts: d.getTime() };
+async function fetchHtml(url) {
+    const cacheBust = Date.now();
+    const bustUrl = url.includes('?') ? `${url}&_cb=${cacheBust}` : `${url}?_cb=${cacheBust}`;
+    const proxies = [
+        // Your own Vercel serverless proxy — reliable, no rate limits, no CORS issues
+        `/api/proxy?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(bustUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(bustUrl)}&ts=${cacheBust}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(bustUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${bustUrl}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}&ts=${cacheBust + 1}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&ts=${cacheBust + 2}`,
+    ];
+    for (let i = 0; i < proxies.length; i++) {
+        try {
+            console.log(`[fetch] Trying proxy ${i + 1}/${proxies.length}...`);
+            const r = await fetchWithTimeout(proxies[i], 10000);
+            if (r.ok) {
+                const t = await r.text();
+                if (t && t.length > 500) { console.log(`[fetch] Proxy ${i+1} succeeded (${t.length} bytes)`); return t; }
+            }
+        } catch(e) { console.log(`[fetch] Proxy ${i+1} failed:`, e.message); }
+        if (i < proxies.length - 1) await new Promise(r => setTimeout(r, 300));
     }
-    // 2. Relative ("15 hours ago") — anchor to server fetch time
-    const relM = raw.match(/(\d+)\s+(second|minute|hour|day|week|month)s?\s+ago/i);
-    if (relM) {
-        const ms = parseInt(relM[1]) * (REL_MS[relM[2].toLowerCase()] || 60000);
-        return { ts: _fetchedAt - ms };
-    }
-    // 3. Absolute date string
-    const d = new Date(raw);
-    if (!isNaN(d)) return { ts: d.getTime() };
-    return { ts: 0 };
+    throw new Error('Could not load data — all sources are temporarily unavailable. Please try again in a few seconds.');
 }
 
-function isBreaking(ts) { return ts > 0 && (Date.now() - ts) < 8 * 3600000; }
+async function searchStock() {
+    const ticker = tickerInput.value.trim().toUpperCase();
+    if (!ticker) { showStockError('Please enter a stock ticker'); return; }
+    stockLoading.classList.add('active');
+    stockError.classList.remove('active');
+    stockResults.style.display = 'none';
+    document.getElementById('searchBtn').disabled = true;
+    try {
+        const html = await fetchHtml(`https://www.stocktitan.net/overview/${ticker}/`);
+        const doc  = new DOMParser().parseFromString(html, 'text/html');
+        const news = extractNews(doc, ticker);
+        const stats = extractStats(doc);
+        if (news.length === 0 && Object.keys(stats).length === 0)
+            throw new Error(`No data found for "${ticker}".`);
+        displayStats(stats, ticker);
+        displayNews(news);
+        stockResults.style.display = 'block';
+    } catch(err) {
+        showStockError(err.message);
+    } finally {
+        stockLoading.classList.remove('active');
+        document.getElementById('searchBtn').disabled = false;
+    }
+}
 
-// ── Parsers ────────────────────────────────────────────────────
-function parseStockTitanNews(doc, ticker) {
+function parseRelativeTime(str) {
+    const m = str.match(/(\d+)\s+(second|minute|hour|day|week|month)/i);
+    if (!m) return Date.now();
+    const n = parseInt(m[1]);
+    const unit = m[2].toLowerCase();
+    const ms = { second: 1000, minute: 60000, hour: 3600000, day: 86400000, week: 604800000, month: 2592000000 };
+    return n * (ms[unit] || 60000);
+}
+
+function extractNews(doc, ticker) {
     const items = [], seen = new Set();
-    doc.querySelectorAll('.news-item-wrapper, .news-item').forEach(wrapper => {
+    const wrappers = doc.querySelectorAll('.news-item-wrapper, .news-item');
+    wrappers.forEach(wrapper => {
         const anchor = wrapper.querySelector('h3.news-title a, .news-title a, h3 a[href*="/news/"]');
         if (!anchor) return;
         const title = anchor.textContent.trim();
-        if (!title || seen.has(title.toLowerCase())) return;
-        seen.add(title.toLowerCase());
+        if (!title || seen.has(title)) return;
+        seen.add(title);
         const href = anchor.getAttribute('href') || '';
         const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
         const timeEl = wrapper.querySelector('.news-time');
-        let ts = 0;
+        let time = 'Unknown', sortKey = 0;
         if (timeEl) {
-            const r = parseTimeStr(
-                timeEl.textContent.replace(/[^\w\s,]+/g, '').trim(),
-                timeEl.getAttribute('title') || ''
-            );
-            ts = r.ts;
-        }
-        let impact = null;
-        const impEl = wrapper.querySelector('.price-impact');
-        if (impEl) {
-            const m = impEl.textContent.match(/([+\-]?\d+(?:\.\d+)?%)/);
-            if (m && m[1] !== '0.00%') {
-                const v = m[1].startsWith('-') ? m[1] : '+' + m[1].replace(/^\+/, '');
-                impact = { value: v, isPositive: !impEl.classList.contains('negative') };
+            const rawText = timeEl.textContent.replace(/[^\w\s,]+/g, '').trim();
+            const titleAttr = timeEl.getAttribute('title') || '';
+            const relMatch = rawText.match(/(\d+\s+(?:second|minute|hour|day|week|month)s?\s+ago)/i);
+            if (relMatch) {
+                time = relMatch[1];
+                sortKey = titleAttr ? (Date.now() - new Date(titleAttr).getTime()) : parseRelativeTime(relMatch[1]);
+            } else {
+                const parsed = new Date(titleAttr || rawText);
+                time = rawText.replace(/^\s*\w+\s+/, '').trim() || rawText;
+                sortKey = isNaN(parsed) ? Date.now() : (Date.now() - parsed.getTime());
             }
         }
+        let impactText = '', isPositive = false;
+        const impactEl = wrapper.querySelector('.price-impact');
+        if (impactEl) {
+            const impactRaw = impactEl.textContent.trim();
+            const impactMatch = impactRaw.match(/([+\-]?\d+(?:\.\d+)?%)/);
+            if (impactMatch && impactMatch[1] !== '0.00%') {
+                impactText = impactMatch[1].startsWith('-') ? impactMatch[1] : '+' + impactMatch[1].replace(/^\+/, '');
+                isPositive = !impactEl.classList.contains('negative');
+            }
+            if (impactEl.classList.contains('positive')) isPositive = true;
+            if (impactEl.classList.contains('negative')) isPositive = false;
+        }
         const tags = [];
-        wrapper.querySelectorAll('.news-tags .badge, .news-tags .tag').forEach(b => {
-            const t = b.textContent.trim();
+        wrapper.querySelectorAll('.news-tags .badge, .news-tags .tag').forEach(badge => {
+            const t = badge.textContent.trim();
             if (t && t.length < 40) tags.push(t);
         });
-        items.push({ title, link, ts, impact, tags, source: 'stocktitan' });
+        items.push({ time, title, link, impact: impactText ? { value: impactText, isPositive } : null, tags, sortKey });
     });
-    if (!items.length) {
+
+    if (items.length === 0) {
         doc.querySelectorAll(`a[href*="/news/${ticker}/"]`).forEach(anchor => {
             const title = anchor.textContent.trim();
-            if (!title || title.length < 10 || seen.has(title.toLowerCase())) return;
+            if (!title || title.length < 10 || seen.has(title)) return;
+            seen.add(title);
+            const href = anchor.getAttribute('href') || '';
+            const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
+            let node = anchor.parentElement;
+            let time = 'Unknown', sortKey = Date.now(), impactText = '', isPositive = false;
+            for (let i = 0; i < 8 && node; i++) {
+                const text = node.textContent;
+                const rel = text.match(/(\d+\s+(?:second|minute|hour|day|week|month)s?\s+ago)/i);
+                const abs = text.match(/((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d+,?\s*\d{0,4})/i);
+                const imp = text.match(/([+\-]\d+(?:\.\d+)?%)/);
+                if (rel) { time = rel[1]; sortKey = parseRelativeTime(rel[1]); break; }
+                if (abs) { time = abs[1].trim(); sortKey = Date.now() - new Date(abs[1]).getTime(); break; }
+                if (imp) { impactText = imp[1]; isPositive = imp[1].startsWith('+'); }
+                node = node.parentElement;
+            }
+            items.push({ time, title, link, impact: impactText ? { value: impactText, isPositive } : null, tags: [], sortKey });
+        });
+    }
+
+    if (items.length === 0) {
+        doc.querySelectorAll('a[href*="/news/"]').forEach(anchor => {
+            const title = anchor.textContent.trim();
+            if (!title || title.length < 20 || !title.includes(' ') || seen.has(title)) return;
             const href = anchor.getAttribute('href') || '';
             if (!href.match(/\/news\/[A-Z]+\//i)) return;
-            seen.add(title.toLowerCase());
+            seen.add(title);
             const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
-            items.push({ title, link, ts: 0, impact: null, tags: [], source: 'stocktitan' });
+            items.push({ time: 'Unknown', title, link, impact: null, tags: [], sortKey: Date.now() });
         });
     }
+
+    items.sort((a, b) => a.sortKey - b.sortKey);
     return items;
 }
 
-function parseFinvizNews(doc) {
-    const items = [], seen = new Set();
-    let lastDate = '';
-    doc.querySelectorAll('table.fullview-news-outer tr, #news-table tr').forEach(tr => {
-        const cells = tr.querySelectorAll('td');
-        if (cells.length < 2) return;
-        const timeCell = cells[0].textContent.trim();
-        const anchor   = cells[1].querySelector('a');
-        if (!anchor) return;
-        const title = anchor.textContent.trim();
-        if (!title || seen.has(title.toLowerCase())) return;
-        seen.add(title.toLowerCase());
-        let ts = 0;
-        const dtMatch = timeCell.match(/(\w{3}-\d{2}-\d{2})\s+(\d+:\d+[AP]M)/i);
-        const tmMatch = timeCell.match(/^(\d+:\d+[AP]M)$/i);
-        if (dtMatch) {
-            lastDate = dtMatch[1];
-            const d = new Date(`${dtMatch[1]} ${dtMatch[2]}`);
-            if (!isNaN(d)) ts = d.getTime();
-        } else if (tmMatch && lastDate) {
-            const d = new Date(`${lastDate} ${tmMatch[1]}`);
-            if (!isNaN(d)) ts = d.getTime();
-        }
-        const href = anchor.getAttribute('href') || '';
-        const link = href.startsWith('http') ? href : `https://finviz.com/${href}`;
-        items.push({ title, link, ts, impact: null, tags: [], source: 'finviz' });
-    });
-    return items;
-}
-
-function parseRSS(xml, sourceId) {
-    const items = [], seen = new Set();
-    let doc;
-    try { doc = new DOMParser().parseFromString(xml, 'text/xml'); } catch(e) { return []; }
-    if (doc.querySelector('parsererror')) {
-        try { doc = new DOMParser().parseFromString(xml, 'text/html'); } catch(e) { return []; }
-    }
-    doc.querySelectorAll('item, entry').forEach(item => {
-        const title = (item.querySelector('title')?.textContent || '').replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-        if (!title || seen.has(title.toLowerCase())) return;
-        seen.add(title.toLowerCase());
-        const link = (item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '').trim();
-        const rawPub = (item.querySelector('pubDate, published, updated')?.textContent || '').trim();
-        let ts = 0;
-        if (rawPub) { const d = new Date(rawPub); if (!isNaN(d)) ts = d.getTime(); }
-        items.push({ title, link, ts, impact: null, tags: [], source: sourceId });
-    });
-    return items;
-}
-
-function parseYahooFundamentals(text) {
-    const out = { freeFloat: null, avgVol: null, price: null };
-    if (!text) return out;
-    try {
-        const s = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-        const json = JSON.parse(s);
-        const result = json?.quoteSummary?.result?.[0];
-        if (!result) return out;
-        const ks = result.defaultKeyStatistics || {};
-        const sd = result.summaryDetail        || {};
-        const pr = result.price                || {};
-        out.freeFloat = ks.floatShares?.raw ?? null;
-        out.avgVol    = sd.averageVolume?.raw ?? ks.averageVolume3Month?.raw ?? null;
-        out.price     = pr.regularMarketPrice?.raw ?? sd.regularMarketPrice?.raw ?? null;
-    } catch {}
-    return out;
-}
-
-function dedup(arrays) {
-    const seen = new Set(), result = [];
-    for (const arr of arrays) for (const item of arr) {
-        const key = item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
-        if (!key || seen.has(key)) continue;
-        seen.add(key); result.push(item);
-    }
-    return result;
-}
-
-// ── Hot stock evaluator ────────────────────────────────────────
-function evaluateHotStock(ticker, stats, fv, news) {
-    const banner  = document.getElementById('hotBanner');
-    const title   = document.getElementById('hotTitle');
-    const reasons = document.getElementById('hotReasons');
-    banner.classList.remove('visible');
-    let price = fv.price;
-    if (!price) { const s = (stats['Price'] || '').replace(/[^0-9.]/g, ''); price = parseFloat(s) || null; }
-    const criteria = [
-        { check: price !== null && price >= 1 && price <= 10,    skip: price === null,        tag: price        ? `💲 Price $${price.toFixed(2)} (in sweet $1–$10 range)` : null },
-        { check: fv.freeFloat !== null && fv.freeFloat <= 10e6,  skip: fv.freeFloat === null, tag: fv.freeFloat ? `📊 Float ${(fv.freeFloat/1e6).toFixed(2)}M shares (low float)` : null },
-        { check: fv.avgVol !== null && fv.avgVol < 500000,       skip: fv.avgVol === null,    tag: fv.avgVol    ? `📈 Avg Vol ${fv.avgVol>=1000?(fv.avgVol/1000).toFixed(0)+'K':fv.avgVol} (low → high rel-vol potential)` : null },
-        { check: news.filter(n => isBreaking(n.ts)).length > 0,  skip: false,                 tag: (() => { const c = news.filter(n => isBreaking(n.ts)).length; return c > 0 ? `🗞️ ${c} breaking article${c>1?'s':''} today` : null; })() },
-    ];
-    const checked = criteria.filter(c => !c.skip);
-    const passed  = checked.filter(c => c.check);
-    const tags    = passed.map(c => c.tag).filter(Boolean);
-    if (passed.length === checked.length && checked.length >= 3) {
-        title.textContent = `🔥 ${ticker} — HOT STOCK ALERT`;
-        reasons.innerHTML = tags.map(t => `<span class="hot-tag">${t}</span>`).join('');
-        banner.classList.add('visible');
-    }
-}
-
-// ── Stats display ──────────────────────────────────────────────
-function displayStats(stats, ticker, fv) {
-    const grid = document.getElementById('statsGrid');
-    grid.innerHTML = '';
-    const add = (label, value, highlight = false) => {
-        const el = document.createElement('div');
-        el.className = 'stat-item';
-        if (highlight) {
-            el.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            el.innerHTML = `<div class="stat-label" style="color:white">📊 ${label}</div><div class="stat-value" style="color:white;font-size:26px">${value}</div>`;
-        } else {
-            el.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
-        }
-        grid.appendChild(el);
-    };
-    add('Ticker', ticker);
-    if (fv.freeFloat !== null) {
-        const ff = fv.freeFloat;
-        stats['Free Float'] = (ff>=1e9?`${(ff/1e9).toFixed(2)}B`:ff>=1e6?`${(ff/1e6).toFixed(2)}M`:ff>=1e3?`${(ff/1e3).toFixed(0)}K`:`${ff}`) + ' shares';
-    }
-    if (fv.avgVol !== null) {
-        const av = fv.avgVol;
-        stats['Avg Volume (3M)'] = av>=1e6?`${(av/1e6).toFixed(2)}M`:av>=1e3?`${(av/1e3).toFixed(0)}K`:`${av}`;
-    }
-    if (!Object.keys(stats).length) { add('Status', 'Stats N/A'); return; }
-    const priority = ['Price','Free Float','Avg Volume (3M)','Market Cap','Shares Outstanding','Float','Short Interest','Float (Short %)','Days to Cover','Revenue (TTM)','Net Income (TTM)','Diluted EPS','Operating CF','Net Profit Margin','Current Ratio'];
-    Object.entries(stats)
-        .sort((a, b) => {
-            const ai = priority.findIndex(p => a[0].includes(p));
-            const bi = priority.findIndex(p => b[0].includes(p));
-            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-        })
-        .forEach(([label, value]) => {
-            const sv = String(value).trim();
-            if (sv && sv !== 'null') add(label, sv, label === 'Free Float');
-        });
-}
-
-// ── News render ────────────────────────────────────────────────
-function sortNews(mode, btn) {
-    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentSort = mode;
-    renderNews(allNewsItems);
-}
-const SRC_LABELS = { stocktitan:'StockTitan', finviz:'Finviz', benzinga:'Benzinga', yahoo:'Yahoo' };
-function renderNews(items) {
-    const sorted = [...items].sort((a, b) => {
-        if (a.ts === 0 && b.ts === 0) return 0;
-        if (a.ts === 0) return 1;
-        if (b.ts === 0) return -1;
-        return currentSort === 'newest' ? b.ts - a.ts : a.ts - b.ts;
-    });
-    document.getElementById('newsCount').textContent = `${sorted.length} article${sorted.length !== 1 ? 's' : ''}`;
-    const container = document.getElementById('newsContainer');
-    if (!sorted.length) { container.innerHTML = '<p class="no-news">No news found from any source.</p>'; return; }
-    container.innerHTML = '';
-    sorted.forEach(n => {
-        const el     = document.createElement('div');
-        el.className = 'news-item';
-        // Always compute display fresh from ts at render time — never stale
-        const display    = n.ts > 0 ? formatDisplay(n.ts) : 'Unknown';
-        const breaking   = isBreaking(n.ts);
-        const breakBadge = breaking ? `<span class="breaking-badge">BREAKING</span>` : '';
-        const timeClass  = breaking ? 'news-time breaking' : 'news-time';
-        const impact     = n.impact ? `<div class="price-impact ${n.impact.isPositive?'positive':'negative'}">${n.impact.isPositive?'▲':'▼'} ${n.impact.value}</div>` : '';
-        const tags       = n.tags.length ? `<div class="news-tags">${n.tags.map(t=>`<span class="badge">${t}</span>`).join('')}</div>` : '';
-        el.innerHTML = `
-            <div class="news-meta">
-                <div class="news-left">
-                    <span class="${timeClass}">🕐 ${display}</span>
-                    <span class="news-source-tag">${SRC_LABELS[n.source] || n.source}</span>
-                    ${breakBadge}
-                </div>
-                ${impact}
-            </div>
-            <h3 class="news-title"><a href="${n.link}" target="_blank" rel="noopener">${n.title}</a></h3>
-            ${tags}`;
-        container.appendChild(el);
-    });
-}
-
-// ── Stats extractor ────────────────────────────────────────────
 function extractStats(doc) {
     const stats = {}, body = doc.body ? doc.body.innerHTML : '';
     const regexMap = [
-        ['Price',             /current stock price[^$]*\$([0-9,\.]+)/i,               '$'],
-        ['Market Cap',        /market cap[^i]*is approximately ([0-9,\.\$MBKTmbt]+)/i, ''],
-        ['Shares Outstanding',/shares outstanding[^i]*is ([0-9,\.MBKTmbt]+)/i,         ''],
-        ['Revenue (TTM)',     /revenue.*?TTM.*?is \$([0-9,\.MBKTmbt]+)/i,              '$'],
-        ['Net Income (TTM)',  /net income.*?TTM.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,      ''],
-        ['Diluted EPS',       /diluted.*?EPS.*?is (\$[0-9,\.\-]+)/i,                  ''],
-        ['Operating CF',      /operating cash flow.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,  ''],
-        ['Net Profit Margin', /net profit margin.*?is ([0-9\-\.]+%)/i,                ''],
-        ['Short Interest',    /short interest[^s]*stands at ([0-9,\.]+ (?:thousand|million|billion)? shares)/i, ''],
-        ['Float (Short %)',   /([0-9,\.]+%)\s+of the float/i,                         ''],
-        ['Days to Cover',     /days to cover[^s]*stands at ([0-9,\.]+ days)/i,        ''],
-        ['Current Ratio',     /current ratio[^i]*is ([0-9,\.]+)/i,                   ''],
+        ['Price',              /current stock price[^$]*\$([0-9,\.]+)/i,               '$'],
+        ['Market Cap',         /market cap[^i]*is approximately ([0-9,\.\$MBKTmbt]+)/i, ''],
+        ['Shares Outstanding', /shares outstanding[^i]*is ([0-9,\.MBKTmbt]+)/i,         ''],
+        ['Revenue (TTM)',      /revenue.*?TTM.*?is \$([0-9,\.MBKTmbt]+)/i,              '$'],
+        ['Net Income (TTM)',   /net income.*?TTM.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,      ''],
+        ['Diluted EPS',        /diluted.*?EPS.*?is (\$[0-9,\.\-]+)/i,                  ''],
+        ['Operating CF',       /operating cash flow.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,  ''],
+        ['Net Profit Margin',  /net profit margin.*?is ([0-9\-\.]+%)/i,                ''],
+        ['Short Interest',     /short interest[^s]*stands at ([0-9,\.]+ (?:thousand|million|billion)? shares)/i, ''],
+        ['Float (Short %)',    /([0-9,\.]+%)\s+of the float/i,                         ''],
+        ['Days to Cover',      /days to cover[^s]*stands at ([0-9,\.]+ days)/i,        ''],
+        ['Current Ratio',      /current ratio[^i]*is ([0-9,\.]+)/i,                   ''],
     ];
     regexMap.forEach(([label, regex, prefix]) => {
         const m = body.match(regex);
@@ -463,81 +304,49 @@ function extractStats(doc) {
     return stats;
 }
 
-// ── Main search ────────────────────────────────────────────────
-async function searchStock() {
-    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
-    if (!ticker) return;
-
-    const loading  = document.getElementById('stockLoading');
-    const errorBox = document.getElementById('stockError');
-    const results  = document.getElementById('stockResults');
-
-    loading.classList.add('active');
-    document.getElementById('loadingMsg').textContent = `Fetching ${ticker}...`;
-    errorBox.classList.remove('active');
-    results.style.display = 'none';
-    document.getElementById('searchBtn').disabled = true;
-    document.getElementById('partialWarn').classList.remove('active');
-    document.getElementById('hotBanner').classList.remove('visible');
-    allNewsItems = []; currentSort = 'newest';
-    document.querySelectorAll('.sort-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
-    initSourcePills();
-
-    try {
-        const res = await fetch(`/api/stock?ticker=${encodeURIComponent(ticker)}`);
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const payload = await res.json();
-
-        // Anchor relative timestamps to when the server fetched the data,
-        // not to when the browser received it. This is the fix for the drift bug.
-        _fetchedAt = payload.fetchedAt || Date.now();
-
-        const { stocktitan, finviz, benzinga, yahoo, yahooFund } = payload;
-
-        const stDoc = stocktitan ? new DOMParser().parseFromString(stocktitan, 'text/html') : null;
-        const fvDoc = finviz     ? new DOMParser().parseFromString(finviz,     'text/html') : null;
-
-        const stNews = stDoc    ? parseStockTitanNews(stDoc, ticker) : [];
-        const fvNews = fvDoc    ? parseFinvizNews(fvDoc)             : [];
-        const bzNews = benzinga ? parseRSS(benzinga, 'benzinga')     : [];
-        const yhNews = yahoo    ? parseRSS(yahoo, 'yahoo')           : [];
-
-        setPill('stocktitan', stNews.length > 0 ? 'ok' : 'empty', stNews.length > 0 ? ` (${stNews.length})` : '');
-        setPill('finviz',     fvNews.length > 0 ? 'ok' : 'empty', fvNews.length > 0 ? ` (${fvNews.length})` : '');
-        setPill('benzinga',   bzNews.length > 0 ? 'ok' : 'empty', bzNews.length > 0 ? ` (${bzNews.length})` : '');
-        setPill('yahoo',      yhNews.length > 0 ? 'ok' : 'empty', yhNews.length > 0 ? ` (${yhNews.length})` : '');
-
-        allNewsItems = dedup([stNews, fvNews, bzNews, yhNews]);
-
-        const stats = stDoc ? extractStats(stDoc) : {};
-        const fv    = parseYahooFundamentals(yahooFund);
-
-        displayStats(stats, ticker, fv);
-        renderNews(allNewsItems);
-        evaluateHotStock(ticker, stats, fv, allNewsItems);
-        results.style.display = 'block';
-
-        const hits = [stNews, fvNews, bzNews, yhNews].filter(a => a.length > 0).length;
-        if (hits < 2 && allNewsItems.length < 5) {
-            const warn = document.getElementById('partialWarn');
-            warn.textContent = `⚠️ Only ${hits} of 4 sources responded. Some news may be missing — try again.`;
-            warn.classList.add('active');
+function displayStats(stats, ticker) {
+    statsGrid.innerHTML = '';
+    const add = (label, value, highlight = false) => {
+        const el = document.createElement('div');
+        el.className = 'stat-item';
+        if (highlight) {
+            el.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            el.innerHTML = `<div class="stat-label" style="color:white">📊 ${label}</div><div class="stat-value" style="color:white;font-size:26px">${value}</div>`;
+        } else {
+            el.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
         }
-        if (allNewsItems.length === 0 && Object.keys(stats).length === 0) {
-            errorBox.textContent = `No data found for "${ticker}". Double-check the ticker symbol.`;
-            errorBox.classList.add('active');
-            results.style.display = 'none';
-        }
-    } catch(err) {
-        errorBox.textContent = err.message;
-        errorBox.classList.add('active');
-    } finally {
-        loading.classList.remove('active');
-        document.getElementById('searchBtn').disabled = false;
-    }
+        statsGrid.appendChild(el);
+    };
+    add('Ticker', ticker);
+    if (!Object.keys(stats).length) { add('Status', 'No Stats Found'); return; }
+    const priority = ['Price','Market Cap','Shares Outstanding','Float','Short Interest','Float (Short %)','Days to Cover','Revenue (TTM)','Net Income (TTM)','Diluted EPS','Operating CF','Net Profit Margin','Current Ratio'];
+    Object.entries(stats)
+        .sort((a, b) => { const ai = priority.findIndex(p => a[0].includes(p)), bi = priority.findIndex(p => b[0].includes(p)); return (ai===-1?99:ai)-(bi===-1?99:bi); })
+        .forEach(([label, value]) => {
+            const sv = String(value).trim();
+            if (sv && sv !== 'null') add(label, sv, label.toLowerCase().includes('float'));
+        });
 }
 
-document.getElementById('tickerInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
+function displayNews(items) {
+    newsContainer.innerHTML = '';
+    if (!items.length) { newsContainer.innerHTML = '<p style="color:#aaa;text-align:center;padding:32px">No news found.</p>'; return; }
+    items.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'news-item';
+        const impact = n.impact ? `<div class="price-impact ${n.impact.isPositive?'positive':'negative'}">${n.impact.isPositive?'▲':'▼'} ${n.impact.value}</div>` : '';
+        const tags = n.tags.length ? `<div class="news-tags">${n.tags.map(t=>`<span class="badge">${t}</span>`).join('')}</div>` : '';
+        el.innerHTML = `<div class="news-meta"><div class="news-time">🕐 ${n.time}</div>${impact}</div><h3 class="news-title"><a href="${n.link}" target="_blank">${n.title}</a></h3>${tags}`;
+        newsContainer.appendChild(el);
+    });
+}
+
+function showStockError(msg) {
+    stockError.textContent = msg;
+    stockError.classList.add('active');
+    stockResults.style.display = 'none';
+}
+
 window.addEventListener('load', () => searchStock());
 </script>
 </body>
