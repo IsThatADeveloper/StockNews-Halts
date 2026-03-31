@@ -39,14 +39,8 @@
         .src-pill.empty   { border-color: #aaa;    color: #666;    background: #e2e3e5; }
         .src-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
-        /* 🔥 Hot Stock Banner */
-        .hot-banner {
-            display: none; align-items: center; gap: 16px;
-            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffcd3c 100%);
-            border-radius: 10px; padding: 16px 22px; margin-bottom: 22px;
-            box-shadow: 0 4px 20px rgba(255,107,53,0.4);
-            animation: flamePulse 2s ease-in-out infinite;
-        }
+        /* hot banner */
+        .hot-banner { display: none; align-items: center; gap: 16px; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffcd3c 100%); border-radius: 10px; padding: 16px 22px; margin-bottom: 22px; box-shadow: 0 4px 20px rgba(255,107,53,0.4); animation: flamePulse 2s ease-in-out infinite; }
         .hot-banner.visible { display: flex; }
         @keyframes flamePulse { 0%,100%{box-shadow:0 4px 20px rgba(255,107,53,0.4)} 50%{box-shadow:0 4px 36px rgba(255,107,53,0.75)} }
         .hot-flame { font-size: 36px; line-height:1; animation: flameWiggle 0.6s ease-in-out infinite alternate; flex-shrink:0; }
@@ -113,7 +107,6 @@
 
     <div id="stockResults" style="display:none">
         <div class="card">
-            <!-- 🔥 banner sits above stats grid -->
             <div class="hot-banner" id="hotBanner">
                 <div class="hot-flame">🔥</div>
                 <div class="hot-text">
@@ -148,36 +141,10 @@ const SOURCES = [
     { id: 'benzinga',   label: 'Benzinga RSS' },
     { id: 'yahoo',      label: 'Yahoo RSS'   },
 ];
-const PROXIES = [
-    url => `/api/proxy?url=${encodeURIComponent(url)}`,
-    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-];
+
 let allNewsItems = [], currentSort = 'newest';
 
-// ── fetch ──────────────────────────────────────────────────────
-async function fetchWithTimeout(url, ms = 9000) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), ms);
-    try { const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' }); clearTimeout(t); return r; }
-    catch(e) { clearTimeout(t); throw e; }
-}
-async function fetchViaProxy(url, minLen = 300) {
-    const cb = Date.now();
-    const busted = url + (url.includes('?') ? '&' : '?') + `_cb=${cb}`;
-    for (const mk of PROXIES) {
-        try {
-            const res = await fetchWithTimeout(mk(busted), 9000);
-            if (!res.ok) continue;
-            const text = await res.text();
-            if (text && text.length >= minLen) return text;
-        } catch(e) {}
-    }
-    return null;
-}
-
-// ── pills ──────────────────────────────────────────────────────
+// ── Pills ──────────────────────────────────────────────────────
 function initSourcePills() {
     document.getElementById('sourceStatus').innerHTML =
         SOURCES.map(s => `<span class="src-pill loading" id="pill-${s.id}"><span class="src-dot"></span>${s.label} ⏳</span>`).join('');
@@ -191,7 +158,7 @@ function setPill(id, state, extra = '') {
     p.innerHTML = `<span class="src-dot"></span>${s.label} ${icon}${extra}`;
 }
 
-// ── time ───────────────────────────────────────────────────────
+// ── Time helpers ───────────────────────────────────────────────
 const REL_MS = { second:1000, minute:60000, hour:3600000, day:86400000, week:604800000, month:2592000000 };
 function formatDisplay(d) {
     const diff = Date.now() - d.getTime();
@@ -207,14 +174,11 @@ function parseTimeStr(raw, titleAttr) {
     if (!isNaN(d)) return { display: formatDisplay(d), ts: d.getTime() };
     return { display: raw||'Unknown', ts: 0 };
 }
-// "breaking" = published within past 8 hours
 function isBreaking(ts) { return ts > 0 && (Date.now() - ts) < 8 * 3600000; }
 
-// ── news fetchers ──────────────────────────────────────────────
-async function fetchStockTitan(ticker) {
-    const html = await fetchViaProxy(`https://www.stocktitan.net/overview/${ticker}/`, 500);
-    if (!html) return [];
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+// ── Parsers (all work on pre-fetched HTML strings / docs) ──────
+
+function parseStockTitanNews(doc, ticker) {
     const items = [], seen = new Set();
     doc.querySelectorAll('.news-item-wrapper, .news-item').forEach(wrapper => {
         const anchor = wrapper.querySelector('h3.news-title a, .news-title a, h3 a[href*="/news/"]');
@@ -248,10 +212,7 @@ async function fetchStockTitan(ticker) {
     return items;
 }
 
-async function fetchFinvizNews(ticker) {
-    const html = await fetchViaProxy(`https://finviz.com/quote.ashx?t=${ticker}&p=d`, 500);
-    if (!html) return [];
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+function parseFinvizNews(doc) {
     const items = [], seen = new Set();
     let lastDate = '';
     doc.querySelectorAll('table.fullview-news-outer tr, #news-table tr').forEach(tr => {
@@ -266,7 +227,7 @@ async function fetchFinvizNews(ticker) {
         let display = timeCell, ts = 0;
         const dtMatch = timeCell.match(/(\w{3}-\d{2}-\d{2})\s+(\d+:\d+[AP]M)/i);
         const tmMatch = timeCell.match(/^(\d+:\d+[AP]M)$/i);
-        if (dtMatch)       { lastDate=dtMatch[1]; const d=new Date(`${dtMatch[1]} ${dtMatch[2]}`); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
+        if (dtMatch)            { lastDate=dtMatch[1]; const d=new Date(`${dtMatch[1]} ${dtMatch[2]}`); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
         else if(tmMatch&&lastDate) { const d=new Date(`${lastDate} ${tmMatch[1]}`); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
         const href = anchor.getAttribute('href')||'';
         const link = href.startsWith('http')?href:`https://finviz.com/${href}`;
@@ -275,14 +236,6 @@ async function fetchFinvizNews(ticker) {
     return items;
 }
 
-async function fetchBenzinga(ticker) {
-    const xml = await fetchViaProxy(`https://www.benzinga.com/stock/${ticker.toLowerCase()}/feed`, 100);
-    return xml ? parseRSS(xml,'benzinga') : [];
-}
-async function fetchYahooRSS(ticker) {
-    const xml = await fetchViaProxy(`https://feeds.finance.yahoo.com/rss/2.0/headline?s=${ticker}&region=US&lang=en-US`, 100);
-    return xml ? parseRSS(xml,'yahoo') : [];
-}
 function parseRSS(xml, sourceId) {
     const items=[], seen=new Set();
     let doc;
@@ -300,6 +253,25 @@ function parseRSS(xml, sourceId) {
     });
     return items;
 }
+
+function parseYahooFundamentals(text) {
+    const out = { freeFloat: null, avgVol: null, price: null };
+    if (!text) return out;
+    try {
+        const s = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+        const json = JSON.parse(s);
+        const result = json?.quoteSummary?.result?.[0];
+        if (!result) return out;
+        const ks = result.defaultKeyStatistics || {};
+        const sd = result.summaryDetail        || {};
+        const pr = result.price                || {};
+        out.freeFloat = ks.floatShares?.raw ?? null;
+        out.avgVol    = sd.averageVolume?.raw ?? ks.averageVolume3Month?.raw ?? null;
+        out.price     = pr.regularMarketPrice?.raw ?? sd.regularMarketPrice?.raw ?? null;
+    } catch {}
+    return out;
+}
+
 function dedup(arrays) {
     const seen=new Set(), result=[];
     for(const arr of arrays) for(const item of arr){
@@ -310,90 +282,31 @@ function dedup(arrays) {
     return result;
 }
 
-// ── Yahoo Finance JSON: free float + avg volume + price ────────
-// Uses Yahoo public quoteSummary API — no key, works via proxy in-browser.
-async function fetchYahooFundamentals(ticker) {
-    const out = { freeFloat: null, avgVol: null, price: null };
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=defaultKeyStatistics,summaryDetail,price`;
-    for (const mk of PROXIES) {
-        try {
-            const res = await fetchWithTimeout(mk(url), 9000);
-            if (!res.ok) continue;
-            const text = await res.text();
-            if (!text || text.length < 50) continue;
-            const jsonStart = text.indexOf('{');
-            const jsonEnd   = text.lastIndexOf('}');
-            if (jsonStart === -1 || jsonEnd === -1) continue;
-            const json   = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-            const result = json?.quoteSummary?.result?.[0];
-            if (!result) continue;
-            const ks = result.defaultKeyStatistics || {};
-            const sd = result.summaryDetail        || {};
-            const pr = result.price                || {};
-            const ff = ks.floatShares?.raw ?? null;
-            const av = sd.averageVolume?.raw ?? ks.averageVolume3Month?.raw ?? null;
-            const px = pr.regularMarketPrice?.raw  ?? sd.regularMarketPrice?.raw ?? null;
-            if (ff !== null) out.freeFloat = ff;
-            if (av !== null) out.avgVol    = av;
-            if (px !== null) out.price     = px;
-            if (out.freeFloat !== null || out.avgVol !== null) break;
-        } catch(e) { console.log('[yahoo-fundamentals]', e.message); }
-    }
-    return out;
-}
-
-// ── 🔥 Hot Stock Evaluator ─────────────────────────────────────
-// Lights up when ALL of:
-//   • Price $1–$10
-//   • Free float ≤ 10M shares
-//   • Avg 3M volume < 500K  (low avg → high rel-vol potential when news hits)
-//   • At least 1 article published within the last 8 hours
+// ── Hot stock evaluator ────────────────────────────────────────
 function evaluateHotStock(ticker, stats, fv, news) {
     const banner  = document.getElementById('hotBanner');
     const title   = document.getElementById('hotTitle');
     const reasons = document.getElementById('hotReasons');
     banner.classList.remove('visible');
-
-    // resolve price (prefer Finviz, fallback to StockTitan stats)
     let price = fv.price;
     if (!price) { const s = (stats['Price']||'').replace(/[^0-9.]/g,''); price = parseFloat(s) || null; }
-
     const criteria = [
-        {
-            check: price !== null && price >= 1 && price <= 10,
-            skip:  price === null,
-            tag:   price ? `💲 Price $${price.toFixed(2)} (in sweet $1–$10 range)` : null,
-        },
-        {
-            check: fv.freeFloat !== null && fv.freeFloat <= 10e6,
-            skip:  fv.freeFloat === null,
-            tag:   fv.freeFloat ? `📊 Float ${(fv.freeFloat/1e6).toFixed(2)}M shares (low float)` : null,
-        },
-        {
-            check: fv.avgVol !== null && fv.avgVol < 500000,
-            skip:  fv.avgVol === null,
-            tag:   fv.avgVol ? `📈 Avg Vol ${fv.avgVol>=1000?(fv.avgVol/1000).toFixed(0)+'K':fv.avgVol} (low → high rel-vol potential)` : null,
-        },
-        {
-            check: news.filter(n => isBreaking(n.ts)).length > 0,
-            skip:  false,
-            tag:   (() => { const c=news.filter(n=>isBreaking(n.ts)).length; return c>0?`🗞️ ${c} breaking article${c>1?'s':''} today`:null; })(),
-        },
+        { check: price !== null && price >= 1 && price <= 10, skip: price === null, tag: price ? `💲 Price $${price.toFixed(2)} (in sweet $1–$10 range)` : null },
+        { check: fv.freeFloat !== null && fv.freeFloat <= 10e6, skip: fv.freeFloat === null, tag: fv.freeFloat ? `📊 Float ${(fv.freeFloat/1e6).toFixed(2)}M shares (low float)` : null },
+        { check: fv.avgVol !== null && fv.avgVol < 500000, skip: fv.avgVol === null, tag: fv.avgVol ? `📈 Avg Vol ${fv.avgVol>=1000?(fv.avgVol/1000).toFixed(0)+'K':fv.avgVol} (low → high rel-vol potential)` : null },
+        { check: news.filter(n => isBreaking(n.ts)).length > 0, skip: false, tag: (() => { const c=news.filter(n=>isBreaking(n.ts)).length; return c>0?`🗞️ ${c} breaking article${c>1?'s':''} today`:null; })() },
     ];
-
     const checked = criteria.filter(c => !c.skip);
     const passed  = checked.filter(c => c.check);
     const tags    = passed.map(c => c.tag).filter(Boolean);
-
-    // Only show if every non-skipped criterion passes, and we have at least 3 data points
     if (passed.length === checked.length && checked.length >= 3) {
-        title.textContent   = `🔥 ${ticker} — HOT STOCK ALERT`;
-        reasons.innerHTML   = tags.map(t => `<span class="hot-tag">${t}</span>`).join('');
+        title.textContent = `🔥 ${ticker} — HOT STOCK ALERT`;
+        reasons.innerHTML = tags.map(t => `<span class="hot-tag">${t}</span>`).join('');
         banner.classList.add('visible');
     }
 }
 
-// ── stats display ──────────────────────────────────────────────
+// ── Stats display ──────────────────────────────────────────────
 function displayStats(stats, ticker, fv) {
     const grid = document.getElementById('statsGrid');
     grid.innerHTML = '';
@@ -409,35 +322,22 @@ function displayStats(stats, ticker, fv) {
         grid.appendChild(el);
     };
     add('Ticker', ticker);
-
-    // Inject Finviz free float + avg vol as explicit cards
     if (fv.freeFloat !== null) {
         const ff = fv.freeFloat;
-        const disp = ff>=1e9?`${(ff/1e9).toFixed(2)}B`:ff>=1e6?`${(ff/1e6).toFixed(2)}M`:ff>=1e3?`${(ff/1e3).toFixed(0)}K`:`${ff}`;
-        stats['Free Float'] = disp + ' shares';
+        stats['Free Float'] = (ff>=1e9?`${(ff/1e9).toFixed(2)}B`:ff>=1e6?`${(ff/1e6).toFixed(2)}M`:ff>=1e3?`${(ff/1e3).toFixed(0)}K`:`${ff}`) + ' shares';
     }
     if (fv.avgVol !== null) {
         const av = fv.avgVol;
-        const disp = av>=1e6?`${(av/1e6).toFixed(2)}M`:av>=1e3?`${(av/1e3).toFixed(0)}K`:`${av}`;
-        stats['Avg Volume (3M)'] = disp;
+        stats['Avg Volume (3M)'] = av>=1e6?`${(av/1e6).toFixed(2)}M`:av>=1e3?`${(av/1e3).toFixed(0)}K`:`${av}`;
     }
-
     if (!Object.keys(stats).length) { add('Status','Stats N/A'); return; }
-
     const priority = ['Price','Free Float','Avg Volume (3M)','Market Cap','Shares Outstanding','Float','Short Interest','Float (Short %)','Days to Cover','Revenue (TTM)','Net Income (TTM)','Diluted EPS','Operating CF','Net Profit Margin','Current Ratio'];
     Object.entries(stats)
-        .sort((a,b) => {
-            const ai=priority.findIndex(p=>a[0].includes(p));
-            const bi=priority.findIndex(p=>b[0].includes(p));
-            return (ai===-1?99:ai)-(bi===-1?99:bi);
-        })
-        .forEach(([label, value]) => {
-            const sv = String(value).trim();
-            if (sv && sv!=='null') add(label, sv, label==='Free Float');
-        });
+        .sort((a,b) => { const ai=priority.findIndex(p=>a[0].includes(p)); const bi=priority.findIndex(p=>b[0].includes(p)); return (ai===-1?99:ai)-(bi===-1?99:bi); })
+        .forEach(([label, value]) => { const sv = String(value).trim(); if (sv && sv!=='null') add(label, sv, label==='Free Float'); });
 }
 
-// ── news render ────────────────────────────────────────────────
+// ── News render ────────────────────────────────────────────────
 function sortNews(mode, btn) {
     document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
@@ -458,11 +358,11 @@ function renderNews(items) {
     sorted.forEach(n => {
         const el = document.createElement('div');
         el.className = 'news-item';
-        const breaking    = isBreaking(n.ts);
-        const breakBadge  = breaking ? `<span class="breaking-badge">BREAKING</span>` : '';
-        const timeClass   = breaking ? 'news-time breaking' : 'news-time';
-        const impact      = n.impact ? `<div class="price-impact ${n.impact.isPositive?'positive':'negative'}">${n.impact.isPositive?'▲':'▼'} ${n.impact.value}</div>` : '';
-        const tags        = n.tags.length ? `<div class="news-tags">${n.tags.map(t=>`<span class="badge">${t}</span>`).join('')}</div>` : '';
+        const breaking   = isBreaking(n.ts);
+        const breakBadge = breaking ? `<span class="breaking-badge">BREAKING</span>` : '';
+        const timeClass  = breaking ? 'news-time breaking' : 'news-time';
+        const impact     = n.impact ? `<div class="price-impact ${n.impact.isPositive?'positive':'negative'}">${n.impact.isPositive?'▲':'▼'} ${n.impact.value}</div>` : '';
+        const tags       = n.tags.length ? `<div class="news-tags">${n.tags.map(t=>`<span class="badge">${t}</span>`).join('')}</div>` : '';
         el.innerHTML = `
             <div class="news-meta">
                 <div class="news-left">
@@ -478,77 +378,7 @@ function renderNews(items) {
     });
 }
 
-// ── main ───────────────────────────────────────────────────────
-async function searchStock() {
-    const ticker   = document.getElementById('tickerInput').value.trim().toUpperCase();
-    if (!ticker)   return;
-    const loading  = document.getElementById('stockLoading');
-    const errorBox = document.getElementById('stockError');
-    const results  = document.getElementById('stockResults');
-
-    loading.classList.add('active');
-    document.getElementById('loadingMsg').textContent = `Fetching ${ticker} from all sources...`;
-    errorBox.classList.remove('active');
-    results.style.display = 'none';
-    document.getElementById('searchBtn').disabled = true;
-    document.getElementById('partialWarn').classList.remove('active');
-    document.getElementById('hotBanner').classList.remove('visible');
-    allNewsItems=[]; currentSort='newest';
-    document.querySelectorAll('.sort-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
-    initSourcePills();
-
-    try {
-        const newsJobs = [
-            { id:'stocktitan', fn:()=>fetchStockTitan(ticker)  },
-            { id:'finviz',     fn:()=>fetchFinvizNews(ticker)  },
-            { id:'benzinga',   fn:()=>fetchBenzinga(ticker)    },
-            { id:'yahoo',      fn:()=>fetchYahooRSS(ticker)    },
-        ];
-        const newsPromises = newsJobs.map(({id,fn}) =>
-            fn().then(items=>{ setPill(id,items.length>0?'ok':'empty',items.length>0?` (${items.length})`:''); return items; })
-               .catch(()=>{ setPill(id,'fail'); return[]; })
-        );
-
-        // Stats (StockTitan text) + Finviz fundamentals — all in parallel
-        const statsPromise = fetchViaProxy(`https://www.stocktitan.net/overview/${ticker}/`,500)
-            .then(html=>html?extractStats(new DOMParser().parseFromString(html,'text/html')):{})
-            .catch(()=>({}));
-
-        const fundPromise = fetchYahooFundamentals(ticker);
-
-        const [newsArrays, stats, fv] = await Promise.all([
-            Promise.all(newsPromises),
-            statsPromise,
-            fundPromise,
-        ]);
-
-        allNewsItems = dedup(newsArrays);
-        displayStats(stats, ticker, fv);
-        renderNews(allNewsItems);
-        evaluateHotStock(ticker, stats, fv, allNewsItems);
-        results.style.display = 'block';
-
-        const hits = newsArrays.filter(a=>a.length>0).length;
-        if (hits < 2 && allNewsItems.length < 5) {
-            const warn = document.getElementById('partialWarn');
-            warn.textContent = `⚠️ Only ${hits} of 4 sources responded. Some news may be missing — try again.`;
-            warn.classList.add('active');
-        }
-        if (allNewsItems.length===0 && Object.keys(stats).length===0) {
-            errorBox.textContent=`No data found for "${ticker}". Double-check the ticker symbol.`;
-            errorBox.classList.add('active');
-            results.style.display='none';
-        }
-    } catch(err) {
-        errorBox.textContent=err.message;
-        errorBox.classList.add('active');
-    } finally {
-        loading.classList.remove('active');
-        document.getElementById('searchBtn').disabled=false;
-    }
-}
-
-// ── stats extractor (StockTitan) ───────────────────────────────
+// ── Stats extractor (from StockTitan HTML doc) ─────────────────
 function extractStats(doc) {
     const stats={}, body=doc.body?doc.body.innerHTML:'';
     const regexMap=[
@@ -576,8 +406,78 @@ function extractStats(doc) {
     return stats;
 }
 
-document.getElementById('tickerInput').addEventListener('keypress', e=>{ if(e.key==='Enter') searchStock(); });
-window.addEventListener('load', ()=>searchStock());
+// ── Main search — ONE fetch to /api/stock ──────────────────────
+async function searchStock() {
+    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+    if (!ticker) return;
+
+    const loading  = document.getElementById('stockLoading');
+    const errorBox = document.getElementById('stockError');
+    const results  = document.getElementById('stockResults');
+
+    loading.classList.add('active');
+    document.getElementById('loadingMsg').textContent = `Fetching ${ticker}...`;
+    errorBox.classList.remove('active');
+    results.style.display = 'none';
+    document.getElementById('searchBtn').disabled = true;
+    document.getElementById('partialWarn').classList.remove('active');
+    document.getElementById('hotBanner').classList.remove('visible');
+    allNewsItems = []; currentSort = 'newest';
+    document.querySelectorAll('.sort-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+    initSourcePills();
+
+    try {
+        // Single request — server fetches all 5 sources in parallel
+        const res = await fetch(`/api/stock?ticker=${encodeURIComponent(ticker)}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const { stocktitan, finviz, benzinga, yahoo, yahooFund } = await res.json();
+
+        // Parse each source from the returned HTML/XML strings
+        const stDoc = stocktitan ? new DOMParser().parseFromString(stocktitan, 'text/html') : null;
+        const fvDoc = finviz     ? new DOMParser().parseFromString(finviz,     'text/html') : null;
+
+        const stNews = stDoc        ? parseStockTitanNews(stDoc, ticker) : [];
+        const fvNews = fvDoc        ? parseFinvizNews(fvDoc)             : [];
+        const bzNews = benzinga     ? parseRSS(benzinga, 'benzinga')     : [];
+        const yhNews = yahoo        ? parseRSS(yahoo, 'yahoo')           : [];
+
+        setPill('stocktitan', stNews.length > 0 ? 'ok' : 'empty', stNews.length > 0 ? ` (${stNews.length})` : '');
+        setPill('finviz',     fvNews.length > 0 ? 'ok' : 'empty', fvNews.length > 0 ? ` (${fvNews.length})` : '');
+        setPill('benzinga',   bzNews.length > 0 ? 'ok' : 'empty', bzNews.length > 0 ? ` (${bzNews.length})` : '');
+        setPill('yahoo',      yhNews.length > 0 ? 'ok' : 'empty', yhNews.length > 0 ? ` (${yhNews.length})` : '');
+
+        allNewsItems = dedup([stNews, fvNews, bzNews, yhNews]);
+
+        const stats = stDoc ? extractStats(stDoc) : {};
+        const fv    = parseYahooFundamentals(yahooFund);
+
+        displayStats(stats, ticker, fv);
+        renderNews(allNewsItems);
+        evaluateHotStock(ticker, stats, fv, allNewsItems);
+        results.style.display = 'block';
+
+        const hits = [stNews, fvNews, bzNews, yhNews].filter(a => a.length > 0).length;
+        if (hits < 2 && allNewsItems.length < 5) {
+            const warn = document.getElementById('partialWarn');
+            warn.textContent = `⚠️ Only ${hits} of 4 sources responded. Some news may be missing — try again.`;
+            warn.classList.add('active');
+        }
+        if (allNewsItems.length === 0 && Object.keys(stats).length === 0) {
+            errorBox.textContent = `No data found for "${ticker}". Double-check the ticker symbol.`;
+            errorBox.classList.add('active');
+            results.style.display = 'none';
+        }
+    } catch(err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add('active');
+    } finally {
+        loading.classList.remove('active');
+        document.getElementById('searchBtn').disabled = false;
+    }
+}
+
+document.getElementById('tickerInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
+window.addEventListener('load', () => searchStock());
 </script>
 </body>
 </html>
