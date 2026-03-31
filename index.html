@@ -144,6 +144,11 @@ const SOURCES = [
 
 let allNewsItems = [], currentSort = 'newest';
 
+// Tracks when the server actually fetched the data.
+// Relative times from StockTitan ("15 hours ago") are anchored to this,
+// not to Date.now(), so cached responses don't cause timestamp drift.
+let _fetchedAt = Date.now();
+
 // ── Pills ──────────────────────────────────────────────────────
 function initSourcePills() {
     document.getElementById('sourceStatus').innerHTML =
@@ -160,24 +165,40 @@ function setPill(id, state, extra = '') {
 
 // ── Time helpers ───────────────────────────────────────────────
 const REL_MS = { second:1000, minute:60000, hour:3600000, day:86400000, week:604800000, month:2592000000 };
-function formatDisplay(d) {
-    const diff = Date.now() - d.getTime();
-    if (diff < 3600000)  return `${Math.round(diff/60000)} min ago`;
-    if (diff < 86400000) return `${Math.round(diff/3600000)}h ago`;
-    return d.toLocaleDateString('en-US',{ month:'short', day:'numeric', year:'numeric' });
+
+// Computes display label fresh from the stored absolute timestamp.
+// Called at render time so it's always accurate — never frozen from parse time.
+function formatDisplay(ts) {
+    const diff = Date.now() - ts;
+    if (diff < 3600000)  return `${Math.round(diff / 60000)} min ago`;
+    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+    return new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
+
+// Returns only { ts } — no display string stored.
+// For relative times, anchors to _fetchedAt (server fetch time) not Date.now(),
+// so a cached "15 hours ago" doesn't drift to "22 hours ago" later.
 function parseTimeStr(raw, titleAttr) {
-    if (titleAttr) { const d = new Date(titleAttr); if (!isNaN(d)) return { display: formatDisplay(d), ts: d.getTime() }; }
+    // 1. ISO datetime in title attribute — most accurate
+    if (titleAttr) {
+        const d = new Date(titleAttr);
+        if (!isNaN(d)) return { ts: d.getTime() };
+    }
+    // 2. Relative ("15 hours ago") — anchor to server fetch time
     const relM = raw.match(/(\d+)\s+(second|minute|hour|day|week|month)s?\s+ago/i);
-    if (relM) { const ms = parseInt(relM[1]) * (REL_MS[relM[2].toLowerCase()]||60000); return { display:`${relM[1]} ${relM[2]}${relM[1]>1?'s':''} ago`, ts: Date.now()-ms }; }
+    if (relM) {
+        const ms = parseInt(relM[1]) * (REL_MS[relM[2].toLowerCase()] || 60000);
+        return { ts: _fetchedAt - ms };
+    }
+    // 3. Absolute date string
     const d = new Date(raw);
-    if (!isNaN(d)) return { display: formatDisplay(d), ts: d.getTime() };
-    return { display: raw||'Unknown', ts: 0 };
+    if (!isNaN(d)) return { ts: d.getTime() };
+    return { ts: 0 };
 }
+
 function isBreaking(ts) { return ts > 0 && (Date.now() - ts) < 8 * 3600000; }
 
-// ── Parsers (all work on pre-fetched HTML strings / docs) ──────
-
+// ── Parsers ────────────────────────────────────────────────────
 function parseStockTitanNews(doc, ticker) {
     const items = [], seen = new Set();
     doc.querySelectorAll('.news-item-wrapper, .news-item').forEach(wrapper => {
@@ -189,24 +210,39 @@ function parseStockTitanNews(doc, ticker) {
         const href = anchor.getAttribute('href') || '';
         const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
         const timeEl = wrapper.querySelector('.news-time');
-        let display = 'Unknown', ts = 0;
-        if (timeEl) { const r = parseTimeStr(timeEl.textContent.replace(/[^\w\s,]+/g,'').trim(), timeEl.getAttribute('title')||''); display=r.display; ts=r.ts; }
+        let ts = 0;
+        if (timeEl) {
+            const r = parseTimeStr(
+                timeEl.textContent.replace(/[^\w\s,]+/g, '').trim(),
+                timeEl.getAttribute('title') || ''
+            );
+            ts = r.ts;
+        }
         let impact = null;
         const impEl = wrapper.querySelector('.price-impact');
-        if (impEl) { const m = impEl.textContent.match(/([+\-]?\d+(?:\.\d+)?%)/); if (m && m[1]!=='0.00%') { const v = m[1].startsWith('-')?m[1]:'+'+m[1].replace(/^\+/,''); impact={value:v, isPositive:!impEl.classList.contains('negative')}; } }
+        if (impEl) {
+            const m = impEl.textContent.match(/([+\-]?\d+(?:\.\d+)?%)/);
+            if (m && m[1] !== '0.00%') {
+                const v = m[1].startsWith('-') ? m[1] : '+' + m[1].replace(/^\+/, '');
+                impact = { value: v, isPositive: !impEl.classList.contains('negative') };
+            }
+        }
         const tags = [];
-        wrapper.querySelectorAll('.news-tags .badge, .news-tags .tag').forEach(b=>{ const t=b.textContent.trim(); if(t&&t.length<40) tags.push(t); });
-        items.push({ title, link, display, ts, impact, tags, source:'stocktitan' });
+        wrapper.querySelectorAll('.news-tags .badge, .news-tags .tag').forEach(b => {
+            const t = b.textContent.trim();
+            if (t && t.length < 40) tags.push(t);
+        });
+        items.push({ title, link, ts, impact, tags, source: 'stocktitan' });
     });
     if (!items.length) {
         doc.querySelectorAll(`a[href*="/news/${ticker}/"]`).forEach(anchor => {
             const title = anchor.textContent.trim();
-            if (!title||title.length<10||seen.has(title.toLowerCase())) return;
-            const href = anchor.getAttribute('href')||'';
+            if (!title || title.length < 10 || seen.has(title.toLowerCase())) return;
+            const href = anchor.getAttribute('href') || '';
             if (!href.match(/\/news\/[A-Z]+\//i)) return;
             seen.add(title.toLowerCase());
-            const link = href.startsWith('http')?href:`https://www.stocktitan.net${href}`;
-            items.push({ title, link, display:'Unknown', ts:0, impact:null, tags:[], source:'stocktitan' });
+            const link = href.startsWith('http') ? href : `https://www.stocktitan.net${href}`;
+            items.push({ title, link, ts: 0, impact: null, tags: [], source: 'stocktitan' });
         });
     }
     return items;
@@ -224,32 +260,40 @@ function parseFinvizNews(doc) {
         const title = anchor.textContent.trim();
         if (!title || seen.has(title.toLowerCase())) return;
         seen.add(title.toLowerCase());
-        let display = timeCell, ts = 0;
+        let ts = 0;
         const dtMatch = timeCell.match(/(\w{3}-\d{2}-\d{2})\s+(\d+:\d+[AP]M)/i);
         const tmMatch = timeCell.match(/^(\d+:\d+[AP]M)$/i);
-        if (dtMatch)            { lastDate=dtMatch[1]; const d=new Date(`${dtMatch[1]} ${dtMatch[2]}`); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
-        else if(tmMatch&&lastDate) { const d=new Date(`${lastDate} ${tmMatch[1]}`); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
-        const href = anchor.getAttribute('href')||'';
-        const link = href.startsWith('http')?href:`https://finviz.com/${href}`;
-        items.push({ title, link, display, ts, impact:null, tags:[], source:'finviz' });
+        if (dtMatch) {
+            lastDate = dtMatch[1];
+            const d = new Date(`${dtMatch[1]} ${dtMatch[2]}`);
+            if (!isNaN(d)) ts = d.getTime();
+        } else if (tmMatch && lastDate) {
+            const d = new Date(`${lastDate} ${tmMatch[1]}`);
+            if (!isNaN(d)) ts = d.getTime();
+        }
+        const href = anchor.getAttribute('href') || '';
+        const link = href.startsWith('http') ? href : `https://finviz.com/${href}`;
+        items.push({ title, link, ts, impact: null, tags: [], source: 'finviz' });
     });
     return items;
 }
 
 function parseRSS(xml, sourceId) {
-    const items=[], seen=new Set();
+    const items = [], seen = new Set();
     let doc;
-    try { doc=new DOMParser().parseFromString(xml,'text/xml'); } catch(e){ return[]; }
-    if (doc.querySelector('parsererror')) { try{ doc=new DOMParser().parseFromString(xml,'text/html'); }catch(e){ return[]; } }
+    try { doc = new DOMParser().parseFromString(xml, 'text/xml'); } catch(e) { return []; }
+    if (doc.querySelector('parsererror')) {
+        try { doc = new DOMParser().parseFromString(xml, 'text/html'); } catch(e) { return []; }
+    }
     doc.querySelectorAll('item, entry').forEach(item => {
-        const title=(item.querySelector('title')?.textContent||'').replace(/<!\[CDATA\[|\]\]>/g,'').trim();
-        if (!title||seen.has(title.toLowerCase())) return;
+        const title = (item.querySelector('title')?.textContent || '').replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        if (!title || seen.has(title.toLowerCase())) return;
         seen.add(title.toLowerCase());
-        const link=(item.querySelector('link')?.textContent||item.querySelector('link')?.getAttribute('href')||'').trim();
-        const rawPub=(item.querySelector('pubDate, published, updated')?.textContent||'').trim();
-        let display='Unknown', ts=0;
-        if (rawPub){ const d=new Date(rawPub); if(!isNaN(d)){ts=d.getTime();display=formatDisplay(d);} }
-        items.push({ title, link, display, ts, impact:null, tags:[], source:sourceId });
+        const link = (item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '').trim();
+        const rawPub = (item.querySelector('pubDate, published, updated')?.textContent || '').trim();
+        let ts = 0;
+        if (rawPub) { const d = new Date(rawPub); if (!isNaN(d)) ts = d.getTime(); }
+        items.push({ title, link, ts, impact: null, tags: [], source: sourceId });
     });
     return items;
 }
@@ -273,10 +317,10 @@ function parseYahooFundamentals(text) {
 }
 
 function dedup(arrays) {
-    const seen=new Set(), result=[];
-    for(const arr of arrays) for(const item of arr){
-        const key=item.title.toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim().slice(0,80);
-        if(!key||seen.has(key)) continue;
+    const seen = new Set(), result = [];
+    for (const arr of arrays) for (const item of arr) {
+        const key = item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!key || seen.has(key)) continue;
         seen.add(key); result.push(item);
     }
     return result;
@@ -289,12 +333,12 @@ function evaluateHotStock(ticker, stats, fv, news) {
     const reasons = document.getElementById('hotReasons');
     banner.classList.remove('visible');
     let price = fv.price;
-    if (!price) { const s = (stats['Price']||'').replace(/[^0-9.]/g,''); price = parseFloat(s) || null; }
+    if (!price) { const s = (stats['Price'] || '').replace(/[^0-9.]/g, ''); price = parseFloat(s) || null; }
     const criteria = [
-        { check: price !== null && price >= 1 && price <= 10, skip: price === null, tag: price ? `💲 Price $${price.toFixed(2)} (in sweet $1–$10 range)` : null },
-        { check: fv.freeFloat !== null && fv.freeFloat <= 10e6, skip: fv.freeFloat === null, tag: fv.freeFloat ? `📊 Float ${(fv.freeFloat/1e6).toFixed(2)}M shares (low float)` : null },
-        { check: fv.avgVol !== null && fv.avgVol < 500000, skip: fv.avgVol === null, tag: fv.avgVol ? `📈 Avg Vol ${fv.avgVol>=1000?(fv.avgVol/1000).toFixed(0)+'K':fv.avgVol} (low → high rel-vol potential)` : null },
-        { check: news.filter(n => isBreaking(n.ts)).length > 0, skip: false, tag: (() => { const c=news.filter(n=>isBreaking(n.ts)).length; return c>0?`🗞️ ${c} breaking article${c>1?'s':''} today`:null; })() },
+        { check: price !== null && price >= 1 && price <= 10,    skip: price === null,        tag: price        ? `💲 Price $${price.toFixed(2)} (in sweet $1–$10 range)` : null },
+        { check: fv.freeFloat !== null && fv.freeFloat <= 10e6,  skip: fv.freeFloat === null, tag: fv.freeFloat ? `📊 Float ${(fv.freeFloat/1e6).toFixed(2)}M shares (low float)` : null },
+        { check: fv.avgVol !== null && fv.avgVol < 500000,       skip: fv.avgVol === null,    tag: fv.avgVol    ? `📈 Avg Vol ${fv.avgVol>=1000?(fv.avgVol/1000).toFixed(0)+'K':fv.avgVol} (low → high rel-vol potential)` : null },
+        { check: news.filter(n => isBreaking(n.ts)).length > 0,  skip: false,                 tag: (() => { const c = news.filter(n => isBreaking(n.ts)).length; return c > 0 ? `🗞️ ${c} breaking article${c>1?'s':''} today` : null; })() },
     ];
     const checked = criteria.filter(c => !c.skip);
     const passed  = checked.filter(c => c.check);
@@ -310,7 +354,7 @@ function evaluateHotStock(ticker, stats, fv, news) {
 function displayStats(stats, ticker, fv) {
     const grid = document.getElementById('statsGrid');
     grid.innerHTML = '';
-    const add = (label, value, highlight=false) => {
+    const add = (label, value, highlight = false) => {
         const el = document.createElement('div');
         el.className = 'stat-item';
         if (highlight) {
@@ -330,34 +374,44 @@ function displayStats(stats, ticker, fv) {
         const av = fv.avgVol;
         stats['Avg Volume (3M)'] = av>=1e6?`${(av/1e6).toFixed(2)}M`:av>=1e3?`${(av/1e3).toFixed(0)}K`:`${av}`;
     }
-    if (!Object.keys(stats).length) { add('Status','Stats N/A'); return; }
+    if (!Object.keys(stats).length) { add('Status', 'Stats N/A'); return; }
     const priority = ['Price','Free Float','Avg Volume (3M)','Market Cap','Shares Outstanding','Float','Short Interest','Float (Short %)','Days to Cover','Revenue (TTM)','Net Income (TTM)','Diluted EPS','Operating CF','Net Profit Margin','Current Ratio'];
     Object.entries(stats)
-        .sort((a,b) => { const ai=priority.findIndex(p=>a[0].includes(p)); const bi=priority.findIndex(p=>b[0].includes(p)); return (ai===-1?99:ai)-(bi===-1?99:bi); })
-        .forEach(([label, value]) => { const sv = String(value).trim(); if (sv && sv!=='null') add(label, sv, label==='Free Float'); });
+        .sort((a, b) => {
+            const ai = priority.findIndex(p => a[0].includes(p));
+            const bi = priority.findIndex(p => b[0].includes(p));
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        })
+        .forEach(([label, value]) => {
+            const sv = String(value).trim();
+            if (sv && sv !== 'null') add(label, sv, label === 'Free Float');
+        });
 }
 
 // ── News render ────────────────────────────────────────────────
 function sortNews(mode, btn) {
-    document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentSort = mode;
     renderNews(allNewsItems);
 }
 const SRC_LABELS = { stocktitan:'StockTitan', finviz:'Finviz', benzinga:'Benzinga', yahoo:'Yahoo' };
 function renderNews(items) {
-    const sorted = [...items].sort((a,b) => {
-        if(a.ts===0&&b.ts===0) return 0;
-        if(a.ts===0) return 1; if(b.ts===0) return -1;
-        return currentSort==='newest' ? b.ts-a.ts : a.ts-b.ts;
+    const sorted = [...items].sort((a, b) => {
+        if (a.ts === 0 && b.ts === 0) return 0;
+        if (a.ts === 0) return 1;
+        if (b.ts === 0) return -1;
+        return currentSort === 'newest' ? b.ts - a.ts : a.ts - b.ts;
     });
-    document.getElementById('newsCount').textContent = `${sorted.length} article${sorted.length!==1?'s':''}`;
+    document.getElementById('newsCount').textContent = `${sorted.length} article${sorted.length !== 1 ? 's' : ''}`;
     const container = document.getElementById('newsContainer');
-    if (!sorted.length) { container.innerHTML='<p class="no-news">No news found from any source.</p>'; return; }
-    container.innerHTML='';
+    if (!sorted.length) { container.innerHTML = '<p class="no-news">No news found from any source.</p>'; return; }
+    container.innerHTML = '';
     sorted.forEach(n => {
-        const el = document.createElement('div');
+        const el     = document.createElement('div');
         el.className = 'news-item';
+        // Always compute display fresh from ts at render time — never stale
+        const display    = n.ts > 0 ? formatDisplay(n.ts) : 'Unknown';
         const breaking   = isBreaking(n.ts);
         const breakBadge = breaking ? `<span class="breaking-badge">BREAKING</span>` : '';
         const timeClass  = breaking ? 'news-time breaking' : 'news-time';
@@ -366,8 +420,8 @@ function renderNews(items) {
         el.innerHTML = `
             <div class="news-meta">
                 <div class="news-left">
-                    <span class="${timeClass}">🕐 ${n.display}</span>
-                    <span class="news-source-tag">${SRC_LABELS[n.source]||n.source}</span>
+                    <span class="${timeClass}">🕐 ${display}</span>
+                    <span class="news-source-tag">${SRC_LABELS[n.source] || n.source}</span>
                     ${breakBadge}
                 </div>
                 ${impact}
@@ -378,10 +432,10 @@ function renderNews(items) {
     });
 }
 
-// ── Stats extractor (from StockTitan HTML doc) ─────────────────
+// ── Stats extractor ────────────────────────────────────────────
 function extractStats(doc) {
-    const stats={}, body=doc.body?doc.body.innerHTML:'';
-    const regexMap=[
+    const stats = {}, body = doc.body ? doc.body.innerHTML : '';
+    const regexMap = [
         ['Price',             /current stock price[^$]*\$([0-9,\.]+)/i,               '$'],
         ['Market Cap',        /market cap[^i]*is approximately ([0-9,\.\$MBKTmbt]+)/i, ''],
         ['Shares Outstanding',/shares outstanding[^i]*is ([0-9,\.MBKTmbt]+)/i,         ''],
@@ -390,23 +444,26 @@ function extractStats(doc) {
         ['Diluted EPS',       /diluted.*?EPS.*?is (\$[0-9,\.\-]+)/i,                  ''],
         ['Operating CF',      /operating cash flow.*?is ([\-]?\$[0-9,\.MBKTmbt]+)/i,  ''],
         ['Net Profit Margin', /net profit margin.*?is ([0-9\-\.]+%)/i,                ''],
-        ['Short Interest',    /short interest[^s]*stands at ([0-9,\.]+ (?:thousand|million|billion)? shares)/i,''],
+        ['Short Interest',    /short interest[^s]*stands at ([0-9,\.]+ (?:thousand|million|billion)? shares)/i, ''],
         ['Float (Short %)',   /([0-9,\.]+%)\s+of the float/i,                         ''],
         ['Days to Cover',     /days to cover[^s]*stands at ([0-9,\.]+ days)/i,        ''],
         ['Current Ratio',     /current ratio[^i]*is ([0-9,\.]+)/i,                   ''],
     ];
-    regexMap.forEach(([label,regex,prefix])=>{ const m=body.match(regex); if(m&&m[1]) stats[label]=(prefix+m[1].trim()).trim(); });
-    doc.querySelectorAll('dl').forEach(dl=>{
-        const dts=dl.querySelectorAll('dt'), dds=dl.querySelectorAll('dd');
-        for(let i=0;i<Math.min(dts.length,dds.length);i++){
-            const k=dts[i].textContent.trim(), v=dds[i].textContent.trim();
-            if(k&&v&&!stats[k]) stats[k]=v;
+    regexMap.forEach(([label, regex, prefix]) => {
+        const m = body.match(regex);
+        if (m && m[1]) stats[label] = (prefix + m[1].trim()).trim();
+    });
+    doc.querySelectorAll('dl').forEach(dl => {
+        const dts = dl.querySelectorAll('dt'), dds = dl.querySelectorAll('dd');
+        for (let i = 0; i < Math.min(dts.length, dds.length); i++) {
+            const k = dts[i].textContent.trim(), v = dds[i].textContent.trim();
+            if (k && v && !stats[k]) stats[k] = v;
         }
     });
     return stats;
 }
 
-// ── Main search — ONE fetch to /api/stock ──────────────────────
+// ── Main search ────────────────────────────────────────────────
 async function searchStock() {
     const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
     if (!ticker) return;
@@ -423,23 +480,27 @@ async function searchStock() {
     document.getElementById('partialWarn').classList.remove('active');
     document.getElementById('hotBanner').classList.remove('visible');
     allNewsItems = []; currentSort = 'newest';
-    document.querySelectorAll('.sort-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+    document.querySelectorAll('.sort-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     initSourcePills();
 
     try {
-        // Single request — server fetches all 5 sources in parallel
         const res = await fetch(`/api/stock?ticker=${encodeURIComponent(ticker)}`);
         if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const { stocktitan, finviz, benzinga, yahoo, yahooFund } = await res.json();
+        const payload = await res.json();
 
-        // Parse each source from the returned HTML/XML strings
+        // Anchor relative timestamps to when the server fetched the data,
+        // not to when the browser received it. This is the fix for the drift bug.
+        _fetchedAt = payload.fetchedAt || Date.now();
+
+        const { stocktitan, finviz, benzinga, yahoo, yahooFund } = payload;
+
         const stDoc = stocktitan ? new DOMParser().parseFromString(stocktitan, 'text/html') : null;
         const fvDoc = finviz     ? new DOMParser().parseFromString(finviz,     'text/html') : null;
 
-        const stNews = stDoc        ? parseStockTitanNews(stDoc, ticker) : [];
-        const fvNews = fvDoc        ? parseFinvizNews(fvDoc)             : [];
-        const bzNews = benzinga     ? parseRSS(benzinga, 'benzinga')     : [];
-        const yhNews = yahoo        ? parseRSS(yahoo, 'yahoo')           : [];
+        const stNews = stDoc    ? parseStockTitanNews(stDoc, ticker) : [];
+        const fvNews = fvDoc    ? parseFinvizNews(fvDoc)             : [];
+        const bzNews = benzinga ? parseRSS(benzinga, 'benzinga')     : [];
+        const yhNews = yahoo    ? parseRSS(yahoo, 'yahoo')           : [];
 
         setPill('stocktitan', stNews.length > 0 ? 'ok' : 'empty', stNews.length > 0 ? ` (${stNews.length})` : '');
         setPill('finviz',     fvNews.length > 0 ? 'ok' : 'empty', fvNews.length > 0 ? ` (${fvNews.length})` : '');
