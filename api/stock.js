@@ -1,7 +1,4 @@
 // api/stock.js
-// Fetches all 5 data sources in parallel server-side.
-// Browser makes ONE request instead of six → ~3-5s instead of 20s.
-
 export const config = { runtime: 'edge' };
 
 const HEADERS = {
@@ -34,7 +31,11 @@ export default async function handler(req) {
     return Response.json({ error: 'Missing ticker' }, { status: 400 });
   }
 
-  // All 5 sources fire simultaneously — total time = slowest single source (~2-4s)
+  // Record the exact moment we fetch — sent back to the browser so relative
+  // timestamps ("15 hours ago") can be anchored to server time, not browser time.
+  // This prevents cached responses from causing timestamp drift.
+  const fetchedAt = Date.now();
+
   const [stocktitan, finviz, benzinga, yahoo, yahooFund] = await Promise.all([
     safeFetch(`https://www.stocktitan.net/overview/${ticker}/`),
     safeFetch(`https://finviz.com/quote.ashx?t=${ticker}&p=d`),
@@ -44,11 +45,10 @@ export default async function handler(req) {
   ]);
 
   return Response.json(
-    { stocktitan, finviz, benzinga, yahoo, yahooFund },
+    { fetchedAt, stocktitan, finviz, benzinga, yahoo, yahooFund },
     {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        // Cache at edge for 60s — repeated searches for same ticker are instant
         'Cache-Control': 's-maxage=60, stale-while-revalidate=30',
       },
     }
